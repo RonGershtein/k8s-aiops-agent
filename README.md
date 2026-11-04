@@ -5,31 +5,56 @@ every claim with evidence from the tool call that produced it, and recommends th
 action. For one fault (a Service selector mismatch) it can also apply the fix after explicit human
 approval, then verifies the result with fresh evidence.
 
-Example run (abridged):
+A real run (Gemini 3.5 Flash-Lite on the recorded scenario 01 snapshot; long lines unwrapped and
+the panel's box borders removed, otherwise verbatim):
 
 ```
-$ aiops investigate "Why is the checkout service unhealthy?" -n scenario-01
+$ aiops investigate "Why is the checkout service unhealthy?" -n scenario-01 --llm gemini
 
-trace 7c1f…
-└── investigate 9.8s
-    ├── model.call 2.1s 6120+410 tok
-    ├── tool.list_pods t1 {"namespace": "scenario-01"}
-    ├── tool.list_deployments t2 {"namespace": "scenario-01"}
-    ├── model.call …
-    ├── tool.get_pod_logs t3 {"namespace": "scenario-01", "name": "checkout-…", "previous": true}
-    ├── tool.get_configmap t5 {"namespace": "scenario-01", "name": "checkout-config"}
-    └── validate_diagnosis
-╭─ Diagnosis ─────────────────────────────────────────────────────────────────╮
-│ bad_configuration (confidence 95%)                                          │
-│ Root cause: ConfigMap checkout-config sets PAYMENT_TIMEOUT_MS to "30s", but │
-│ checkout expects integer milliseconds, so it exits and crash loops.         │
-│ Evidence                                                                    │
-│   [t1] pod is crash looping          “CrashLoopBackOff”                     │
-│   [t3] exits on config parse error   “FATAL config: PAYMENT_TIMEOUT_MS=…”   │
-│   [t5] value comes from ConfigMap    “"PAYMENT_TIMEOUT_MS": "30s"”          │
-│ Recommended action (risk: low): set it to "30000", then rollout restart.    │
-╰─────────────────────────────────────────────────────────────────────────────╯
+trace 239a9da9ddcb915837202a75a219b7c5
+└── investigate 4427ms
+    ├── model.call 924ms 1962+58 tok
+    ├── tool.list_pods 0ms t1 {"namespace": "scenario-01"}
+    ├── tool.list_deployments 0ms t2 {"namespace": "scenario-01"}
+    ├── tool.list_services 0ms t3 {"namespace": "scenario-01"}
+    ├── model.call 1229ms 2249+116 tok
+    ├── tool.describe_pod 1ms t4 {"namespace": "scenario-01", "name": "checkout-5787576987-r846n"}
+    ├── tool.get_pod_logs 0ms t5 {"previous": true, "name": "checkout-5787576987-r846n", "namespace": "scenario-01", "tail_lines": 50}
+    ├── tool.get_events 1ms t6 {"namespace": "scenario-01"}
+    ├── model.call 783ms 5415+28 tok
+    ├── tool.get_configmap 0ms t7 {"namespace": "scenario-01", "name": "checkout-config"}
+    ├── model.call 1473ms 5520+341 tok
+    └── validate_diagnosis 0ms
+
+Diagnosis: Why is the checkout service unhealthy?
+bad_configuration (confidence 100%)
+
+Root cause
+  The checkout service configuration (ConfigMap 'checkout-config') specifies PAYMENT_TIMEOUT_MS as
+  '30s', but the application expects an integer number of milliseconds, causing it to fail
+  validation and exit immediately with a fatal error.
+
+Evidence
+  [t1] The checkout pod is in a CrashLoopBackOff state due to an invalid configuration value.
+      “"waiting_reasons": ["CrashLoopBackOff"]”
+  [t5] The checkout container exits with a configuration error regarding PAYMENT_TIMEOUT_MS.
+      “FATAL config: PAYMENT_TIMEOUT_MS="30s" is not a valid integer number of milliseconds”
+  [t7] The ConfigMap checkout-config specifies PAYMENT_TIMEOUT_MS as a duration string ("30s")
+       instead of an integer number of milliseconds.
+      “"PAYMENT_TIMEOUT_MS": "30s"”
+
+Recommended action (risk: low)
+  Update the ConfigMap 'checkout-config' so that PAYMENT_TIMEOUT_MS is set to a valid integer
+  value representing milliseconds (e.g., '30000' instead of '30s').
+
+stop=diagnosis_submitted steps=4 tool_calls=7 tokens=15146+543 latency=4427ms
 ```
+
+**Results:** with a real model (Gemini 3.5 Flash-Lite, 3 trials per scenario, LLM judge),
+16 of 17 graded trials pass (94%), including 6/6 on the two held-out scenarios. One more trial
+errored on a free-tier quota limit and is reported separately. See the
+[Gemini eval report](evals/results/fixture-gemini.md) and [evaluation strategy](#evaluation-strategy).
+
 
 ## Contents
 
@@ -134,9 +159,18 @@ docker compose run --rm agent eval --llm anthropic --trials 3 --judge         # 
 ```
 
 Reports are written to `evals/results/<backend>-<llm>.md` (and `.json`), separating tuning and
-held-out scenarios. The committed report is the [offline gate](evals/results/fixture-scripted.md).
-The Claude report (3 trials plus the judge) comes from the second command above or from the manual
-`real-llm-eval` CI job, which uploads it as the `eval-claude` artifact.
+held-out scenarios. Two reports are committed:
+
+- [Gemini 3.5 Flash-Lite](evals/results/fixture-gemini.md): the real-model result (3 trials plus
+  the judge). It was run on the free tier because no Anthropic key was available while building;
+  the design targets Claude, and the same command with `--llm anthropic` (or the manual
+  `real-llm-eval` CI job) produces the Claude report.
+- [Offline gate](evals/results/fixture-scripted.md): the scripted test double that CI runs.
+
+A trial whose model call never got an answer (`stop_reason=model_error`, for example a quota
+limit) is reported as **errored**: listed, but left out of the pass rate, because it says nothing
+about the diagnosis. Wrong answers always count as failures. If every trial errored, the pass rate
+is 0, so an outage cannot pass the gate.
 
 ### Evaluation strategy
 
@@ -306,7 +340,7 @@ is a hard backstop below that.
 ### Evaluation approach
 
 See [evaluation strategy](#evaluation-strategy): deterministic correctness, grounding, trajectory,
-action-safety and budget checks on every run, plus a Claude judge against a reference answer,
+action-safety and budget checks on every run, plus an LLM judge (Claude or Gemini) against a reference answer,
 multiple trials, and held-out scenarios reported separately.
 
 ### Safety boundary
