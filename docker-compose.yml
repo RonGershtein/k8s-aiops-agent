@@ -60,7 +60,7 @@ services:
     image: docker.langfuse.com/langfuse/langfuse:4
     profiles: [observability]
     depends_on: *langfuse-depends
-    ports: ["3000:3000"]
+    ports: ["127.0.0.1:3000:3000"]
     environment:
       <<: *langfuse-env
       NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-local-dev-nextauth-secret}

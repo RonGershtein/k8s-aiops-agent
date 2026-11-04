@@ -22,6 +22,7 @@ def test_ensure_namespace_allowed_outside_allowlist_raises_forbidden() -> None:
     "text",
     [
         '{"DB_PASSWORD": "hunter2"}',
+        '{"env": [{"name": "DB_PASSWORD", "value": "hunter2"}]}',
         "api_key=hunter2",
         "Authorization: Bearer hunter2",
         "token: eyJhbGciOi.eyJzdWIiOi.c2lnbmF0dXJl",

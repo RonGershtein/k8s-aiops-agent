@@ -6,12 +6,17 @@ class ToolForbiddenError(Exception):
     """The agent asked for something outside its allowed boundary."""
 
 
+_SECRET_WORD = r"(?:password|passwd|secret|token|api[_-]?key|private[_-]?key|credentials?)"
 _SECRET_KEY_VALUE = re.compile(
-    r"""(?ix)
-    ("?[\w.-]*(?:password|passwd|secret|token|api[_-]?key|private[_-]?key|credentials?)[\w.-]*"?
+    rf"""(?ix)
+    ("?[\w.-]*{_SECRET_WORD}[\w.-]*"?
     \s*[:=]\s*"?)
-    ([^"\s,}]+)
+    ([^"\s,}}]+)
     """
+)
+# Kubernetes env vars serialize as {"name": "DB_PASSWORD", "value": "..."}: the name is the key.
+_SECRET_ENV_VAR = re.compile(
+    rf'(?i)("name":\s*"[\w.-]*{_SECRET_WORD}[\w.-]*",\s*"value":\s*")((?:[^"\\]|\\.)*)'
 )
 _BEARER = re.compile(r"(?i)(bearer\s+)[\w.~+/-]+=*")
 _JWT = re.compile(r"eyJ[\w-]+\.[\w-]+\.[\w-]+")
@@ -37,6 +42,7 @@ def ensure_namespace_allowed(namespace: str, allowed: Collection[str]) -> None:
 def redact(text: str) -> str:
     text = _JWT.sub(REDACTED, text)
     text = _BEARER.sub(rf"\g<1>{REDACTED}", text)
+    text = _SECRET_ENV_VAR.sub(rf"\g<1>{REDACTED}", text)
     return _SECRET_KEY_VALUE.sub(rf"\g<1>{REDACTED}", text)
 
 
