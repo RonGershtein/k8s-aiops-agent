@@ -5,11 +5,13 @@ import pytest
 
 from k8s_aiops_agent import agent as agent_module
 from k8s_aiops_agent.agent import MAX_REPEATED_CALLS, Remediation, check_diagnosis, investigate
+from k8s_aiops_agent.config import AgentSettings
+from k8s_aiops_agent.evals import load_scenarios, trial_result
 from k8s_aiops_agent.fixture_kube import FixtureKube
 from k8s_aiops_agent.kube import KubeError
-from k8s_aiops_agent.llm import ModelError, ScriptedModel
+from k8s_aiops_agent.llm import ModelError, ScriptedModel, build_model
 from k8s_aiops_agent.schemas import FaultCategory, RemediationProposal
-from tests.builders import make_settings, scripted_model, tool_call
+from tests.builders import SCENARIOS_DIR, make_settings, scripted_model, tool_call
 
 
 def submit(evidence: list[dict[str, str]], **overrides: Any) -> dict[str, Any]:
@@ -338,3 +340,16 @@ def test_fallback_without_evidence_is_inconclusive() -> None:
     assert diagnosis.category is FaultCategory.INCONCLUSIVE
     assert not diagnosis.fault_found
     assert diagnosis.evidence == []
+
+
+@pytest.mark.llm
+def test_real_gemini_diagnoses_crashloop_correctly(
+    kube: FixtureKube, real_gemini_settings: AgentSettings
+) -> None:
+    scenario = load_scenarios(SCENARIOS_DIR, False, ["01-crashloop-bad-config"])[0]
+    model = build_model(real_gemini_settings)
+
+    run = investigate(scenario.question, scenario.namespace, real_gemini_settings, kube, model)
+    trial = trial_result(scenario, 1, run, real_gemini_settings, judge=None)
+
+    assert trial.checks == dict.fromkeys(trial.checks, True)

@@ -158,6 +158,11 @@ make eval EVAL_ARGS="--llm anthropic --backend live --trials 1"              # f
 docker compose run --rm agent eval --llm anthropic --trials 3 --judge         # same, in Docker
 ```
 
+A quick real-model check: `uv run pytest -m llm` runs scenario 01 through the real Gemini API and
+asserts every eval check passes (correct, grounded, safe). It reads `GEMINI_API_KEY` from the shell
+or `.env`, skips without it, and is excluded from the default `pytest` run so it never spends quota
+by accident.
+
 Reports are written to `evals/results/<backend>-<llm>.md` (and `.json`), separating tuning and
 held-out scenarios. Two reports are committed:
 
