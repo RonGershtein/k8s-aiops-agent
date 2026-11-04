@@ -19,6 +19,14 @@ _JWT = re.compile(r"eyJ[\w-]+\.[\w-]+\.[\w-]+")
 REDACTED = "[REDACTED]"
 
 
+_ESCAPES_AND_SPACE = re.compile(r'[\\"\s]+')
+
+
+def normalize_text(text: str) -> str:
+    """Ignores JSON escaping and whitespace, so quotes copied from JSON output still match."""
+    return _ESCAPES_AND_SPACE.sub(" ", text).strip().lower()
+
+
 def ensure_namespace_allowed(namespace: str, allowed: Collection[str]) -> None:
     if namespace not in allowed:
         raise ToolForbiddenError(

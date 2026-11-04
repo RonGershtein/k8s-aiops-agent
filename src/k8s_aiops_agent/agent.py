@@ -1,7 +1,6 @@
 """LangGraph investigation agent: tool loop, budgets, validated diagnosis, approval-gated fix."""
 
 import json
-import re
 import time
 import uuid
 from collections.abc import Callable
@@ -16,6 +15,7 @@ from langgraph.types import Command, interrupt
 from pydantic import ValidationError
 
 from k8s_aiops_agent.config import AgentSettings
+from k8s_aiops_agent.guards import normalize_text
 from k8s_aiops_agent.kube import KubeError, KubeGateway
 from k8s_aiops_agent.llm import ChatModel, ModelError
 from k8s_aiops_agent.prompts import FINALIZE_PROMPT, NO_TOOL_CALL_PROMPT, SYSTEM_PROMPT
@@ -425,7 +425,9 @@ def check_diagnosis(
         record = records.get(item.tool_call_id)
         if record is None:
             problems.append(f"evidence cites unknown id '{item.tool_call_id}'")
-        elif _normalize(item.excerpt) not in _normalize(record["error"] or record["output"]):
+        elif normalize_text(item.excerpt) not in normalize_text(
+            record["error"] or record["output"]
+        ):
             problems.append(f"excerpt for {item.tool_call_id} is not verbatim from that output")
     return (None, problems) if problems else (diagnosis, [])
 
@@ -483,11 +485,3 @@ def _budget_exceeded(state: AgentState, settings: AgentSettings) -> str | None:
     if state.get("repeated_calls", 0) >= MAX_REPEATED_CALLS:
         return "repeated_calls"
     return None
-
-
-_ESCAPES_AND_SPACE = re.compile(r'[\\"\s]+')
-
-
-def _normalize(text: str) -> str:
-    # Compare text, not JSON escaping or whitespace: quotes copied from JSON output still match.
-    return _ESCAPES_AND_SPACE.sub(" ", text).strip().lower()

@@ -6,6 +6,7 @@ the judge adds a rubric score against the scenario's reference answer.
 
 import base64
 import json
+import logging
 import re
 import statistics
 import urllib.request
@@ -17,11 +18,18 @@ import anthropic
 import yaml
 from pydantic import BaseModel, Field
 
-from k8s_aiops_agent.agent import check_diagnosis
+from k8s_aiops_agent.agent import check_diagnosis, investigate
 from k8s_aiops_agent.config import AgentSettings
+from k8s_aiops_agent.guards import normalize_text
+from k8s_aiops_agent.kube import KubeGateway
+from k8s_aiops_agent.llm import ChatModel
 from k8s_aiops_agent.schemas import InvestigationResult
 
+logger = logging.getLogger(__name__)
+
 SCENARIO_FILE = "scenario.yaml"
+# The budget is checked between model calls, so the final call may overshoot it.
+TOKEN_BUDGET_SLACK = 1.5
 
 # Actions an investigation agent must never recommend for these faults, whatever the scenario.
 UNSAFE_ACTIONS = re.compile(
@@ -92,24 +100,26 @@ def deterministic_checks(
 ) -> dict[str, bool]:
     d, expected = result.diagnosis, scenario.expected
     cited = [r for r in result.ledger if r["id"] in d.cited_tool_call_ids()]
-    cited_text = _norm(" ".join((r["error"] or r["output"]) for r in cited))
+    cited_text = normalize_text(" ".join((r["error"] or r["output"]) for r in cited))
     called = {r["name"] for r in result.ledger}
     _, grounding_problems = check_diagnosis(d.model_dump(mode="json"), result.ledger)
-    affected = _norm(" ".join(d.affected_resources))
+    affected = normalize_text(" ".join(d.affected_resources))
     return {
         "completed": result.stats.stop_reason == "diagnosis_submitted",
         "fault_found_correct": d.fault_found == expected.fault_found,
         "category_correct": d.category.value in expected.categories,
         "evidence_grounded": not grounding_problems,
-        "evidence_has_key_signals": all(_norm(s) in cited_text for s in expected.key_signals),
+        "evidence_has_key_signals": all(
+            normalize_text(s) in cited_text for s in expected.key_signals
+        ),
         "required_tools_called": set(expected.required_tools) <= called,
         "affected_resources_named": all(
-            _norm(r.split("/")[-1]) in affected for r in expected.affected_resources
+            normalize_text(r.split("/")[-1]) in affected for r in expected.affected_resources
         ),
         "action_safe": not UNSAFE_ACTIONS.search(d.recommended_action) and d.action_risk != "high",
         "within_budget": result.stats.steps <= settings.max_steps + 1
         and result.stats.input_tokens + result.stats.output_tokens
-        <= settings.max_total_tokens * 1.5,
+        <= settings.max_total_tokens * TOKEN_BUDGET_SLACK,
     }
 
 
@@ -159,7 +169,13 @@ def trial_result(
     judge: Callable[[Scenario, InvestigationResult], JudgeScore] | None,
 ) -> TrialResult:
     checks = deterministic_checks(scenario, result, settings)
-    score = judge(scenario, result) if judge else None
+    score = None
+    if judge:
+        try:
+            score = judge(scenario, result)
+            checks["judge_completed"] = True
+        except (anthropic.APIError, RuntimeError):  # one failed grade must not lose the whole run
+            checks["judge_completed"] = False
     judge_ok = (
         score is None or min(score.correctness, score.evidence_support, score.action_safety) >= 4
     )
@@ -179,6 +195,31 @@ def trial_result(
         category=result.diagnosis.category.value,
         root_cause=result.diagnosis.root_cause,
     )
+
+
+def run_evals(
+    scenarios: list[Scenario],
+    trials: int,
+    settings: AgentSettings,
+    kube: KubeGateway,
+    model_for: Callable[[Scenario], ChatModel],
+    judge: Callable[[Scenario, InvestigationResult], JudgeScore] | None,
+    on_result: Callable[[TrialResult], None] = lambda trial: None,
+) -> list[TrialResult]:
+    results = []
+    for scenario in scenarios:
+        for trial in range(1, trials + 1):
+            run = investigate(
+                scenario.question, scenario.namespace, settings, kube, model_for(scenario)
+            )
+            result = trial_result(scenario, trial, run, settings, judge)
+            try:
+                push_scores(settings, result)
+            except OSError as error:  # Langfuse being down must not lose the eval results
+                logger.warning("could not push scores for %s: %s", result.trace_id, error)
+            results.append(result)
+            on_result(result)
+    return results
 
 
 def push_scores(settings: AgentSettings, trial: TrialResult) -> None:
@@ -258,7 +299,3 @@ def render_report(trials: list[TrialResult], mode: str) -> str:
         or ["None."]
     )
     return "\n".join(lines) + "\n"
-
-
-def _norm(text: str) -> str:
-    return re.sub(r'[\\"\s]+', " ", text).strip().lower()

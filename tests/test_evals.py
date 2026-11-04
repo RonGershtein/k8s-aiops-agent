@@ -10,8 +10,11 @@ from k8s_aiops_agent.evals import (
     Scenario,
     deterministic_checks,
     load_scenarios,
+    run_evals,
     trial_result,
 )
+from k8s_aiops_agent.fixture_kube import FixtureKube
+from k8s_aiops_agent.llm import ScriptedModel
 from k8s_aiops_agent.schemas import Diagnosis, InvestigationResult, RunStats
 
 SETTINGS = AgentSettings(_env_file=None)  # type: ignore[call-arg]
@@ -128,7 +131,38 @@ def test_load_scenarios_without_held_out_skips_them() -> None:
     assert not any(s.held_out for s in scenarios)
 
 
-def test_every_scenario_has_an_offline_script() -> None:
+def test_load_scenarios_every_scenario_has_an_offline_script() -> None:
     scenarios = load_scenarios(Path("scenarios"), include_held_out=True, only=None)
 
     assert all(Path(f"evals/scripted/{s.id}.yaml").exists() for s in scenarios)
+
+
+def test_trial_result_judge_failure_is_recorded_not_raised() -> None:
+    def broken_judge(scenario: Scenario, run: InvestigationResult) -> JudgeScore:
+        raise RuntimeError("judge returned no parsable output")
+
+    trial = trial_result(SCENARIO, 1, result(), SETTINGS, broken_judge)
+
+    assert trial.checks["judge_completed"] is False
+    assert not trial.passed
+
+
+def test_run_evals_offline_runs_every_trial_and_reports_each_result() -> None:
+    scenarios = load_scenarios(Path("scenarios"), include_held_out=False, only=None)
+    settings = AgentSettings(  # type: ignore[call-arg]
+        _env_file=None, allowed_namespaces=[s.namespace for s in scenarios]
+    )
+    reported: list[str] = []
+
+    results = run_evals(
+        scenarios,
+        2,
+        settings,
+        FixtureKube.from_dir(Path("scenarios")),
+        lambda s: ScriptedModel.from_file(Path(f"evals/scripted/{s.id}.yaml")),
+        judge=None,
+        on_result=lambda trial: reported.append(trial.scenario),
+    )
+
+    assert len(results) == len(reported) == 2 * len(scenarios)
+    assert all(trial.passed for trial in results)

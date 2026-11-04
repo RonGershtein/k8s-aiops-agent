@@ -11,14 +11,7 @@ from rich.tree import Tree
 
 from k8s_aiops_agent.agent import Remediation, investigate
 from k8s_aiops_agent.config import AgentSettings, KubeBackend, LlmProvider
-from k8s_aiops_agent.evals import (
-    ClaudeJudge,
-    TrialResult,
-    load_scenarios,
-    push_scores,
-    render_report,
-    trial_result,
-)
+from k8s_aiops_agent.evals import ClaudeJudge, TrialResult, load_scenarios, render_report, run_evals
 from k8s_aiops_agent.fixture_kube import FixtureKube
 from k8s_aiops_agent.kube import KubeGateway, LiveKube
 from k8s_aiops_agent.llm import build_model
@@ -58,7 +51,7 @@ def investigate_command(
             _build_remediation(settings) if allow_remediation else None,
         )
     except ValueError as error:
-        raise _fail(str(error)) from error
+        raise _usage_error(str(error)) from error
     finally:
         shutdown_tracing()
     if as_json:
@@ -82,26 +75,32 @@ def eval_command(
     settings = _load_settings(backend, llm)
     scenarios = load_scenarios(Path("scenarios"), held_out, scenario)
     if not scenarios:
-        raise _fail("no scenarios selected")
+        raise _usage_error("no scenarios selected")
     missing = {s.namespace for s in scenarios} - set(settings.allowed_namespaces)
     if missing:
-        raise _fail(f"add {sorted(missing)} to AGENT_ALLOWED_NAMESPACES")
+        raise _usage_error(f"add {sorted(missing)} to AGENT_ALLOWED_NAMESPACES")
     if judge and settings.anthropic_api_key is None:
-        raise _fail("--judge needs ANTHROPIC_API_KEY")
+        raise _usage_error("--judge needs ANTHROPIC_API_KEY")
     setup_tracing(settings)
     kube = _build_kube(settings)
     grader = ClaudeJudge(settings) if judge else None
-    results: list[TrialResult] = []
+
+    def print_result(result: TrialResult) -> None:
+        mark = "[green]pass[/]" if result.passed else "[red]FAIL[/]"
+        console.print(
+            f"{mark} {result.scenario} #{result.trial} {result.category} ({result.stop_reason})"
+        )
+
     try:
-        for case in scenarios:
-            for trial in range(1, trials + 1):
-                model = build_model(settings, SCRIPTED_DIR / f"{case.id}.yaml")
-                run = investigate(case.question, case.namespace, settings, kube, model)
-                result = trial_result(case, trial, run, settings, grader)
-                push_scores(settings, result)
-                results.append(result)
-                mark = "[green]pass[/]" if result.passed else "[red]FAIL[/]"
-                console.print(f"{mark} {case.id} #{trial} {result.category} ({result.stop_reason})")
+        results = run_evals(
+            scenarios,
+            trials,
+            settings,
+            kube,
+            lambda case: build_model(settings, SCRIPTED_DIR / f"{case.id}.yaml"),
+            grader,
+            print_result,
+        )
     finally:
         shutdown_tracing()
     mode = f"{settings.backend.value}-{settings.llm_provider.value}"
@@ -146,28 +145,30 @@ def _load_settings(backend: KubeBackend | None, llm: LlmProvider | None) -> Agen
     try:
         return AgentSettings(**overrides)
     except ValidationError as error:
-        raise _fail(f"invalid configuration: {error}") from error
+        raise _usage_error(f"invalid configuration: {error}") from error
 
 
 def _build_kube(settings: AgentSettings) -> KubeGateway:
     if settings.backend is KubeBackend.FIXTURE:
         return FixtureKube.from_dir(settings.fixtures_dir)
     if settings.kubeconfig is None:
-        raise _fail("live backend needs AGENT_KUBECONFIG (run `make cluster-up`)")
+        raise _usage_error("live backend needs AGENT_KUBECONFIG (run `make cluster-up`)")
     try:
         return LiveKube.from_kubeconfig(settings.kubeconfig)
     except OSError as error:
-        raise _fail(f"cannot read kubeconfig {settings.kubeconfig}: {error}") from error
+        raise _usage_error(f"cannot read kubeconfig {settings.kubeconfig}: {error}") from error
 
 
 def _build_remediation(settings: AgentSettings) -> Remediation:
     path = settings.remediator_kubeconfig
     if settings.backend is not KubeBackend.LIVE or path is None:
-        raise _fail("--allow-remediation needs the live backend and AGENT_REMEDIATOR_KUBECONFIG")
+        raise _usage_error(
+            "--allow-remediation needs the live backend and AGENT_REMEDIATOR_KUBECONFIG"
+        )
     try:
         patcher = LiveSelectorPatcher.from_kubeconfig(path)
     except OSError as error:
-        raise _fail(f"cannot read kubeconfig {path}: {error}") from error
+        raise _usage_error(f"cannot read kubeconfig {path}: {error}") from error
     return Remediation(patcher=patcher, approve=_ask_approval)
 
 
@@ -262,6 +263,6 @@ def _trace_tree(path: Path) -> Tree | str:
     return tree
 
 
-def _fail(message: str) -> typer.Exit:
+def _usage_error(message: str) -> typer.Exit:
     console.print(f"[red]error:[/] {message}")
     return typer.Exit(code=2)
