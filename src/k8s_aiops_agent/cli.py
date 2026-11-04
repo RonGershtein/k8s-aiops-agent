@@ -11,12 +11,22 @@ from rich.tree import Tree
 
 from k8s_aiops_agent.agent import Remediation, investigate
 from k8s_aiops_agent.config import AgentSettings, KubeBackend, LlmProvider
+from k8s_aiops_agent.evals import (
+    ClaudeJudge,
+    TrialResult,
+    load_scenarios,
+    push_scores,
+    render_report,
+    trial_result,
+)
 from k8s_aiops_agent.fixture_kube import FixtureKube
 from k8s_aiops_agent.kube import KubeGateway, LiveKube
 from k8s_aiops_agent.llm import build_model
 from k8s_aiops_agent.remediation import LiveSelectorPatcher
 from k8s_aiops_agent.schemas import InvestigationResult, RemediationProposal
 from k8s_aiops_agent.telemetry import setup_tracing, shutdown_tracing
+
+SCRIPTED_DIR = Path("evals/scripted")
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 console = Console(stderr=True)
@@ -54,6 +64,55 @@ def investigate_command(
         print(result.model_dump_json(indent=2))
     else:
         _render(result, settings.trace_dir)
+
+
+@app.command("eval")
+def eval_command(
+    trials: Annotated[int, typer.Option(min=1, help="Runs per scenario.")] = 1,
+    judge: Annotated[bool, typer.Option(help="Also score each run with the Claude judge.")] = False,
+    held_out: Annotated[bool, typer.Option(help="Include held-out scenarios.")] = True,
+    scenario: Annotated[list[str] | None, typer.Option(help="Only these scenario ids.")] = None,
+    backend: Annotated[KubeBackend | None, typer.Option()] = None,
+    llm: Annotated[LlmProvider | None, typer.Option()] = None,
+    min_pass_rate: Annotated[float, typer.Option(help="Exit 1 below this pass rate.")] = 0.0,
+    out_dir: Annotated[Path, typer.Option()] = Path("evals/results"),
+) -> None:
+    """Run the scenario evals and write a Markdown + JSON report."""
+    settings = _load_settings(backend, llm)
+    scenarios = load_scenarios(Path("scenarios"), held_out, scenario)
+    if not scenarios:
+        raise _fail("no scenarios selected")
+    missing = {s.namespace for s in scenarios} - set(settings.allowed_namespaces)
+    if missing:
+        raise _fail(f"add {sorted(missing)} to AGENT_ALLOWED_NAMESPACES")
+    if judge and settings.anthropic_api_key is None:
+        raise _fail("--judge needs ANTHROPIC_API_KEY")
+    setup_tracing(settings)
+    kube = _build_kube(settings)
+    grader = ClaudeJudge(settings) if judge else None
+    results: list[TrialResult] = []
+    try:
+        for case in scenarios:
+            for trial in range(1, trials + 1):
+                model = build_model(settings, SCRIPTED_DIR / f"{case.id}.yaml")
+                run = investigate(case.question, case.namespace, settings, kube, model)
+                result = trial_result(case, trial, run, settings, grader)
+                push_scores(settings, result)
+                results.append(result)
+                mark = "[green]pass[/]" if result.passed else "[red]FAIL[/]"
+                console.print(f"{mark} {case.id} #{trial} {result.category} ({result.stop_reason})")
+    finally:
+        shutdown_tracing()
+    mode = f"{settings.backend.value}-{settings.llm_provider.value}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / f"{mode}.md").write_text(render_report(results, mode))
+    (out_dir / f"{mode}.json").write_text(
+        json.dumps([r.model_dump(mode="json") for r in results], indent=2) + "\n"
+    )
+    rate = sum(r.passed for r in results) / len(results)
+    console.print(f"pass rate {rate:.0%} -> {out_dir / f'{mode}.md'}")
+    if rate < min_pass_rate:
+        raise typer.Exit(code=1)
 
 
 @app.command("trace")

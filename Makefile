@@ -1,6 +1,6 @@
 S ?= 01
 
-.PHONY: cluster-up cluster-down scenario-up scenarios-down fixtures test lint
+.PHONY: cluster-up cluster-down scenario-up scenarios-down fixtures test lint eval
 
 cluster-up:
 	kind get clusters | grep -qx aiops || kind create cluster --config deploy/kind-config.yaml --wait 120s
@@ -21,6 +21,9 @@ fixtures:
 
 test:
 	uv run pytest
+
+eval:
+	uv run aiops eval $(EVAL_ARGS)
 
 lint:
 	uv run ruff check . && uv run ruff format --check . && uv run mypy src
