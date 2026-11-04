@@ -6,6 +6,7 @@ import pytest
 from k8s_aiops_agent import agent as agent_module
 from k8s_aiops_agent.agent import Remediation, check_diagnosis, investigate
 from k8s_aiops_agent.fixture_kube import FixtureKube
+from k8s_aiops_agent.kube import KubeError
 from k8s_aiops_agent.llm import ModelError, ScriptedModel
 from k8s_aiops_agent.schemas import FaultCategory, RemediationProposal
 from tests.builders import make_settings, scripted_model, tool_call
@@ -187,8 +188,10 @@ class FakeCluster:
         }
 
     def patch_service_selector(
-        self, namespace: str, service: str, selector: dict[str, str]
+        self, namespace: str, service: str, current: dict[str, str], selector: dict[str, str]
     ) -> None:
+        if current != self.selector:
+            raise KubeError(422, "the server rejected our request: test operation failed")
         self.patches.append(selector)
         self.selector = selector
 
@@ -248,6 +251,29 @@ def test_remediation_declined_changes_nothing() -> None:
     assert cluster.patches == []
     assert result.remediation is not None
     assert not result.remediation.approved
+
+
+@pytest.mark.usefixtures("no_verify_wait")
+def test_remediation_service_changed_after_approval_is_not_patched() -> None:
+    cluster = FakeCluster()
+
+    def approve_while_someone_edits(proposal: RemediationProposal) -> bool:
+        cluster.selector = {"app": "edited-meanwhile"}
+        return True
+
+    result = investigate(
+        "q",
+        "scenario-03",
+        make_settings(),
+        cluster,
+        ScriptedModel(selector_fix_turns()),  # type: ignore[arg-type]
+        Remediation(patcher=cluster, approve=approve_while_someone_edits),
+    )
+
+    assert cluster.patches == []
+    assert result.remediation is not None
+    assert not result.remediation.applied
+    assert "test operation failed" in result.remediation.message
 
 
 def test_remediation_that_never_converges_checks_each_attempt_and_sleeps_between(

@@ -259,7 +259,10 @@ class _RemediationNodes:
         with observe("remediation.apply", "tool", input_value=proposal.model_dump()) as span:
             try:
                 self._remediation.patcher.patch_service_selector(
-                    proposal.namespace, proposal.service, proposal.proposed_selector
+                    proposal.namespace,
+                    proposal.service,
+                    proposal.current_selector,
+                    proposal.proposed_selector,
                 )
             except KubeError as error:
                 mark_error(span, str(error))
@@ -287,10 +290,10 @@ class _RemediationNodes:
                     self._settings.max_tool_output_chars,
                 )
                 records.append(record)
-                if routes_to(record, proposal.matching_ready_pods):
+                resolved = routes_to(record, proposal.matching_ready_pods)
+                if resolved:
                     break
             last = records[-1]
-            resolved = routes_to(last, proposal.matching_ready_pods)
             set_output(span, {"resolved": resolved, "attempts": len(records)})
         evidence = Evidence(
             claim="Fresh read of the Service and its endpoints after the patch.",

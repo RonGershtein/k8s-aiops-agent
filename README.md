@@ -197,8 +197,10 @@ When the diagnosis is a Service selector mismatch and carries a proposed selecto
    selector, the proposed selector, the pods it will route to, and the expected effect.
 2. **Pauses for approval:** LangGraph `interrupt()`. Nothing changes unless a human types `y`, and
    the default is no.
-3. **Applies through one narrow tool:** a JSON-patch `replace` of `spec.selector`, using a
-   separate remediator identity that RBAC only allows to `get`/`patch` Services in `scenario-03`.
+3. **Applies through one narrow tool:** a JSON patch that first `test`s that `spec.selector` is
+   still the one the human approved, then `replace`s it. If anyone changed the Service in the
+   meantime, the API server rejects the whole patch. It uses a separate remediator identity that
+   RBAC only allows to `get`/`patch` Services in `scenario-03`.
 4. **Verifies with fresh evidence:** polls the Service's endpoints with the read-only identity
    until the selected pods are ready endpoints, and reports `resolved` with that evidence (ids
    `v…`).

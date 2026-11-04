@@ -8,14 +8,20 @@ from k8s_aiops_agent.remediation import LiveSelectorPatcher
 from tests.builders import api_error
 
 
-def test_patch_service_selector_replaces_the_whole_selector(core: MagicMock) -> None:
+def test_patch_service_selector_replaces_the_whole_selector_only_if_unchanged(
+    core: MagicMock,
+) -> None:
+    patcher = LiveSelectorPatcher(core)
 
-    LiveSelectorPatcher(core).patch_service_selector("ns", "frontend", {"app": "frontend"})
+    patcher.patch_service_selector("ns", "frontend", {"app": "frontend-v2"}, {"app": "frontend"})
 
     core.patch_namespaced_service.assert_called_once_with(
         "frontend",
         "ns",
-        [{"op": "replace", "path": "/spec/selector", "value": {"app": "frontend"}}],
+        [
+            {"op": "test", "path": "/spec/selector", "value": {"app": "frontend-v2"}},
+            {"op": "replace", "path": "/spec/selector", "value": {"app": "frontend"}},
+        ],
         _request_timeout=REQUEST_TIMEOUT_SECONDS,
     )
 
@@ -31,4 +37,4 @@ def test_patch_service_selector_failure_raises_kube_error(
     core.patch_namespaced_service.side_effect = failure
 
     with pytest.raises(KubeError):
-        LiveSelectorPatcher(core).patch_service_selector("ns", "frontend", {"app": "frontend"})
+        LiveSelectorPatcher(core).patch_service_selector("ns", "frontend", {}, {"app": "frontend"})

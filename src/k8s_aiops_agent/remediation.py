@@ -13,7 +13,7 @@ from k8s_aiops_agent.tools import ToolRecord
 
 class SelectorPatcher(Protocol):
     def patch_service_selector(
-        self, namespace: str, service: str, selector: dict[str, str]
+        self, namespace: str, service: str, current: dict[str, str], selector: dict[str, str]
     ) -> None: ...
 
 
@@ -29,10 +29,14 @@ class LiveSelectorPatcher:
         return cls(client.CoreV1Api(api))
 
     def patch_service_selector(
-        self, namespace: str, service: str, selector: dict[str, str]
+        self, namespace: str, service: str, current: dict[str, str], selector: dict[str, str]
     ) -> None:
-        # JSON patch "replace" swaps the whole selector, so stale keys cannot survive a merge.
-        body = [{"op": "replace", "path": "/spec/selector", "value": selector}]
+        # "test" makes the API server reject the patch if the selector changed since approval;
+        # "replace" swaps the whole selector, so stale keys cannot survive a merge.
+        body = [
+            {"op": "test", "path": "/spec/selector", "value": current},
+            {"op": "replace", "path": "/spec/selector", "value": selector},
+        ]
         call_api(self._core.patch_namespaced_service, service, namespace, body)
 
 
