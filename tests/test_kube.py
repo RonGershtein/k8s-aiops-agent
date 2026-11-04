@@ -34,6 +34,18 @@ def test_get_pod_logs_previous_unavailable_falls_back_to_current_logs() -> None:
     assert logs == PREVIOUS_LOGS_UNAVAILABLE + "FATAL config"
 
 
+def test_get_pod_logs_previous_gone_reported_in_body_falls_back_to_current() -> None:
+    core = MagicMock()
+    core.read_namespaced_pod_log.side_effect = [
+        "unable to retrieve container logs for containerd://abc",
+        "FATAL config",
+    ]
+
+    logs = live_kube_with_core(core).get_pod_logs("ns", "pod", previous=True)
+
+    assert logs == PREVIOUS_LOGS_UNAVAILABLE + "FATAL config"
+
+
 def test_get_pod_logs_previous_forbidden_raises_instead_of_falling_back() -> None:
     core = MagicMock()
     core.read_namespaced_pod_log.side_effect = api_error(403, "forbidden")

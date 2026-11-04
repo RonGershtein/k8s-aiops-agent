@@ -12,6 +12,7 @@ Json = dict[str, Any]
 
 REQUEST_TIMEOUT_SECONDS = 10
 MAX_EVENTS = 30
+_LOGS_GONE = "unable to retrieve container logs"
 PREVIOUS_LOGS_UNAVAILABLE = "[previous container logs unavailable; showing current container]\n"
 
 
@@ -109,13 +110,16 @@ class LiveKube:
         if not previous:
             return read(False)
         try:
-            return read(True)
+            logs = read(True)
+            # The kubelet sometimes answers 200 with this message instead of an error status.
+            if not logs.startswith(_LOGS_GONE):
+                return logs
         except KubeError as error:
             # The kubelet garbage-collects old containers fast; a crash-looping pod's current
             # (already exited) container still holds the crash output.
             if error.status in (403, 404):
                 raise
-            return PREVIOUS_LOGS_UNAVAILABLE + read(False)
+        return PREVIOUS_LOGS_UNAVAILABLE + read(False)
 
     def get_events(self, namespace: str, involved_object: str | None = None) -> list[Json]:
         selector = f"involvedObject.name={involved_object}" if involved_object else None
