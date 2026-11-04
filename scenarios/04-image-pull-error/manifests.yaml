@@ -1,0 +1,30 @@
+# Held-out scenario: never used while tuning the prompt. The image tag does not exist.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory
+  namespace: scenario-04
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: inventory}
+  template:
+    metadata:
+      labels: {app: inventory}
+    spec:
+      containers:
+        - name: inventory
+          image: nginx:1.27-alpne
+          ports: [{containerPort: 80}]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory
+  namespace: scenario-04
+spec:
+  selector: {app: inventory}
+  ports: [{port: 80, targetPort: 80}]

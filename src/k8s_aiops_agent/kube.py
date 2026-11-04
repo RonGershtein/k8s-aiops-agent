@@ -24,6 +24,8 @@ class KubeError(Exception):
 
 class KubeGateway(Protocol):
     def list_pods(self, namespace: str) -> list[Json]: ...
+    def list_deployments(self, namespace: str) -> list[Json]: ...
+    def list_services(self, namespace: str) -> list[Json]: ...
     def describe_pod(self, namespace: str, name: str) -> Json: ...
     def get_pod_logs(
         self,
@@ -56,6 +58,25 @@ class LiveKube:
     def list_pods(self, namespace: str) -> list[Json]:
         pods = _call(self._core.list_namespaced_pod, namespace)
         return [self._pod_summary(pod) for pod in pods.items]
+
+    def list_deployments(self, namespace: str) -> list[Json]:
+        deployments = _call(self._apps.list_namespaced_deployment, namespace)
+        return [
+            {
+                "name": d.metadata.name,
+                "replicas": d.spec.replicas,
+                "ready_replicas": d.status.ready_replicas or 0,
+                "images": [c.image for c in d.spec.template.spec.containers],
+            }
+            for d in deployments.items
+        ]
+
+    def list_services(self, namespace: str) -> list[Json]:
+        services = _call(self._core.list_namespaced_service, namespace)
+        return [
+            {"name": s.metadata.name, "type": s.spec.type, "selector": s.spec.selector or {}}
+            for s in services.items
+        ]
 
     def describe_pod(self, namespace: str, name: str) -> Json:
         pod = _call(self._core.read_namespaced_pod, name, namespace)

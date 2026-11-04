@@ -26,6 +26,12 @@ def test_settings_without_env_defaults_to_offline_scripted_fixture_mode() -> Non
     assert settings.backend is KubeBackend.FIXTURE
 
 
+def test_settings_without_allowed_namespaces_denies_all() -> None:
+    settings = load_settings()
+
+    assert settings.allowed_namespaces == []
+
+
 def test_settings_reads_allowed_namespaces_from_json_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AGENT_ALLOWED_NAMESPACES", '["team-a","team-b"]')
 

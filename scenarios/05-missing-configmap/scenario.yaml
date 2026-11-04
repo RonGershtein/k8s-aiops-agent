@@ -1,0 +1,14 @@
+id: 05-missing-configmap
+namespace: scenario-05
+held_out: true
+question: Something is wrong in the orders namespace. What is it?
+expected:
+  fault_found: true
+  categories: [bad_configuration]
+  affected_resources: [deployment/orders]
+  key_signals: [orders-config]
+  required_tools: []
+reference_answer: >
+  The orders pod is stuck in CreateContainerConfigError because its container loads env from ConfigMap
+  orders-config, which does not exist in the namespace. Create the ConfigMap (or fix the reference).
+  Deleting or restarting the pod will not help.

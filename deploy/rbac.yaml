@@ -65,6 +65,16 @@ kind: Namespace
 metadata:
   name: scenario-03
 ---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: scenario-04
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: scenario-05
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -112,6 +122,34 @@ kind: RoleBinding
 metadata:
   name: aiops-agent-readonly
   namespace: scenario-03
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: aiops-agent-readonly
+subjects:
+  - kind: ServiceAccount
+    name: aiops-agent-readonly
+    namespace: aiops-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: aiops-agent-readonly
+  namespace: scenario-04
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: aiops-agent-readonly
+subjects:
+  - kind: ServiceAccount
+    name: aiops-agent-readonly
+    namespace: aiops-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: aiops-agent-readonly
+  namespace: scenario-05
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole

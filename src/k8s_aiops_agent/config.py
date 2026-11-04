@@ -29,9 +29,8 @@ class AgentSettings(BaseSettings):
 
     backend: KubeBackend = KubeBackend.FIXTURE
     kubeconfig: Path | None = None
-    allowed_namespaces: list[str] = Field(
-        default_factory=lambda: ["scenario-00", "scenario-01", "scenario-02", "scenario-03"]
-    )
+    # Deny by default: the agent reads nothing until namespaces are explicitly allowed.
+    allowed_namespaces: list[str] = Field(default_factory=list)
     fixtures_dir: Path = Path("scenarios")
 
     max_steps: int = Field(default=12, ge=1, le=50)

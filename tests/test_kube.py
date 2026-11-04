@@ -86,6 +86,15 @@ def test_live_selector_mismatch_service_has_no_ready_endpoints(live_kube: LiveKu
 
 
 @pytest.mark.live
+def test_live_discovery_lists_workloads_without_knowing_names(live_kube: LiveKube) -> None:
+    deployments = live_kube.list_deployments("scenario-02")
+    services = live_kube.list_services("scenario-02")
+
+    assert [d["name"] for d in deployments] == ["catalog"]
+    assert [s["name"] for s in services] == ["catalog"]
+
+
+@pytest.mark.live
 def test_live_secrets_are_forbidden_by_rbac(live_kube: LiveKube) -> None:
     with pytest.raises(ApiException) as raised:
         live_kube._core.list_namespaced_secret("scenario-01")
