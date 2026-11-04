@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import httpx
 from kubernetes.client.exceptions import ApiException
 
 from k8s_aiops_agent.config import AgentSettings
@@ -32,3 +33,19 @@ def api_error(status: int, message: str = "error") -> ApiException:
     error = ApiException(status=status, reason="Error")
     error.body = json.dumps({"message": message})
     return error
+
+
+def gemini_settings() -> AgentSettings:
+    return make_settings(llm_provider="gemini", gemini_api_key="g-test")
+
+
+def mock_http(*responses: httpx.Response) -> tuple[httpx.Client, list[httpx.Request]]:
+    """An httpx client that replays responses in order and records every request it sent."""
+    sent: list[httpx.Request] = []
+    queue = list(responses)
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return queue.pop(0)
+
+    return httpx.Client(transport=httpx.MockTransport(handle)), sent

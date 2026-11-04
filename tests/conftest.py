@@ -6,7 +6,7 @@ import pytest
 from k8s_aiops_agent.fixture_kube import FixtureKube
 from tests.builders import SCENARIOS_DIR
 
-_CONFIG_PREFIXES = ("AGENT_", "LANGFUSE_", "ANTHROPIC_")
+_CONFIG_PREFIXES = ("AGENT_", "LANGFUSE_", "ANTHROPIC_", "GEMINI_")
 
 
 @pytest.fixture(autouse=True)

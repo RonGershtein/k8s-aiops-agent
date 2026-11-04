@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class LlmProvider(StrEnum):
     ANTHROPIC = "anthropic"
+    GEMINI = "gemini"
     SCRIPTED = "scripted"
 
 
@@ -30,6 +31,8 @@ class AgentSettings(BaseSettings):
     effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
     max_output_tokens: int = Field(default=16_000, ge=1_000)
     anthropic_api_key: SecretStr | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
+    gemini_model: str = "gemini-3.5-flash-lite"
+    gemini_api_key: SecretStr | None = Field(default=None, validation_alias="GEMINI_API_KEY")
 
     backend: KubeBackend = KubeBackend.FIXTURE
     kubeconfig: Path | None = None
@@ -54,4 +57,6 @@ class AgentSettings(BaseSettings):
     def _anthropic_requires_api_key(self) -> "AgentSettings":
         if self.llm_provider is LlmProvider.ANTHROPIC and self.anthropic_api_key is None:
             raise ValueError("ANTHROPIC_API_KEY must be set when AGENT_LLM_PROVIDER=anthropic")
+        if self.llm_provider is LlmProvider.GEMINI and self.gemini_api_key is None:
+            raise ValueError("GEMINI_API_KEY must be set when AGENT_LLM_PROVIDER=gemini")
         return self
