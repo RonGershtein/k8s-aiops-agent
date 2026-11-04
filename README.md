@@ -40,6 +40,7 @@ trace 7c1f…
 - [Observability](#observability)
 - [Remediation with approval](#remediation-with-approval)
 - [CI](#ci)
+- [Project layout](#project-layout)
 - [Design rationale](#design-rationale)
 - [Trade-offs and next steps](#trade-offs-and-next-steps)
 
@@ -225,6 +226,33 @@ directly. No write tool is exposed.
 | container build | the image builds, and the eval gate passes inside it |
 | kind e2e | real cluster: RBAC, live tools (`pytest -m live`), and approved remediation resolving scenario 03 |
 | Claude eval (manual) | `workflow_dispatch` with the `ANTHROPIC_API_KEY` secret: 3 trials per scenario + judge |
+
+## Project layout
+
+```
+src/k8s_aiops_agent/   the package (src layout): one module per job
+  agent.py             LangGraph loop: model ⇄ tools, budgets, validation, approval-gated fix
+  tools.py             the tool surface: typed, read-only, guarded, recorded in the evidence ledger
+  kube.py              read-only cluster access (Kubernetes Python client)
+  fixture_kube.py      record a namespace, replay it offline behind the same interface
+  remediation.py       the one write action: replace a Service selector
+  guards.py            namespace allowlist, redaction, text normalization
+  llm.py               Claude, Gemini and the scripted test double behind one interface
+  prompts.py           system and control prompts
+  schemas.py           the Diagnosis and InvestigationResult contracts
+  evals.py             deterministic checks, LLM judge, reports
+  telemetry.py         OpenTelemetry spans to local JSONL and Langfuse
+  mcp_server.py        the read-only tools over MCP
+  cli.py, config.py    the `aiops` CLI and environment-based settings
+tests/                 unit and offline agent tests (+ `-m live` against kind)
+scenarios/<id>/        manifests, expected result and recorded fixture per scenario
+evals/                 scripted model turns and committed eval reports
+deploy/, scripts/      kind config, RBAC, kubeconfig minting, fixture recording
+```
+
+The package is flat on purpose. At about 2.3k lines, each module does one job and is found by
+name. Subpackages (for example `llm/`, `kube/`, `evals/`) are the next step if a module group
+outgrows a single file.
 
 ## Design rationale
 
