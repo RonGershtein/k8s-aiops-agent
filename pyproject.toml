@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "An AI agent that investigates a Kubernetes cluster, finds the root cause, and recommends a safe next action."
 readme = "README.md"
 authors = [
-    { name = "RonGershtein", email = "talmor3003@gmail.com" }
+    { name = "Ron Gershtein", email = "talmor3003@gmail.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [

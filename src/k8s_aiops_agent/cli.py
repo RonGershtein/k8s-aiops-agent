@@ -40,18 +40,15 @@ def investigate_command(
 ) -> None:
     """Investigate a namespace and print a root cause, evidence and a recommended action."""
     settings = _load_settings(backend, llm)
-    setup_tracing(settings)
+    kube = _build_kube(settings)
     try:
-        result = investigate(
-            question,
-            namespace,
-            settings,
-            _build_kube(settings),
-            build_model(settings, script),
-            _build_remediation(settings) if allow_remediation else None,
-        )
+        model = build_model(settings, script)
     except ValueError as error:
         raise _usage_error(str(error)) from error
+    remediation = _build_remediation(settings) if allow_remediation else None
+    setup_tracing(settings)
+    try:
+        result = investigate(question, namespace, settings, kube, model, remediation)
     finally:
         shutdown_tracing()
     if as_json:
@@ -130,10 +127,11 @@ def mcp_command(
 @app.command("trace")
 def trace_command(
     trace_id: str,
-    trace_dir: Annotated[Path, typer.Option()] = Path("traces"),
+    trace_dir: Annotated[Path | None, typer.Option(help="Overrides AGENT_TRACE_DIR.")] = None,
 ) -> None:
     """Show a recorded trace as a timeline: request -> agent -> model -> tools -> response."""
-    console.print(_trace_tree(trace_dir / f"{trace_id}.jsonl"))
+    directory = trace_dir or _load_settings(None, None).trace_dir
+    console.print(_trace_tree(directory / f"{trace_id}.jsonl"))
 
 
 def _load_settings(backend: KubeBackend | None, llm: LlmProvider | None) -> AgentSettings:
@@ -231,7 +229,9 @@ def _render(result: InvestigationResult, trace_dir: Path) -> None:
 def _trace_tree(path: Path) -> Tree | str:
     if not path.exists():
         return f"no trace file at {path}"
-    spans = [json.loads(line) for line in path.read_text().splitlines()]
+    spans = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    if not spans:
+        return f"trace file {path} is empty"
     spans.sort(key=lambda s: s["start_ns"])
     by_parent: dict[str | None, list[dict[str, Any]]] = {}
     for span in spans:

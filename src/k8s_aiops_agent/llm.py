@@ -25,10 +25,6 @@ class ModelTurn:
     output_tokens: int
     model: str
 
-    @property
-    def tool_uses(self) -> list[dict[str, Any]]:
-        return [block for block in self.content if block.get("type") == "tool_use"]
-
 
 class ChatModel(Protocol):
     name: str
