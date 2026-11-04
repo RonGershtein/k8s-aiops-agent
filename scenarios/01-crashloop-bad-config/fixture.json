@@ -1,0 +1,391 @@
+{
+  "configmaps": {
+    "checkout-config": {
+      "data": {
+        "PAYMENT_PROVIDER_URL": "http://payments.internal:8080",
+        "PAYMENT_TIMEOUT_MS": "30s"
+      },
+      "name": "checkout-config"
+    }
+  },
+  "deployment_details": {
+    "checkout": {
+      "available_replicas": 0,
+      "conditions": [
+        {
+          "lastTransitionTime": "2026-11-04T16:05:05+00:00",
+          "lastUpdateTime": "2026-11-04T16:06:45+00:00",
+          "message": "ReplicaSet \"checkout-5787576987\" has successfully progressed.",
+          "reason": "NewReplicaSetAvailable",
+          "status": "True",
+          "type": "Progressing"
+        },
+        {
+          "lastTransitionTime": "2026-11-04T16:38:18+00:00",
+          "lastUpdateTime": "2026-11-04T16:38:18+00:00",
+          "message": "Deployment does not have minimum availability.",
+          "reason": "MinimumReplicasUnavailable",
+          "status": "False",
+          "type": "Available"
+        }
+      ],
+      "containers": [
+        {
+          "args": [
+            "echo \"checkout v1.4.2 starting\"\necho \"loading configuration from environment\"\ncase \"$PAYMENT_TIMEOUT_MS\" in\n  ''|*[!0-9]*)\n    echo \"FATAL config: PAYMENT_TIMEOUT_MS=\\\"$PAYMENT_TIMEOUT_MS\\\" is not a valid integer number of milliseconds\"\n    exit 1 ;;\nesac\necho \"ready\"; while true; do sleep 3600; done\n"
+          ],
+          "command": [
+            "sh",
+            "-c"
+          ],
+          "env_from": [
+            {
+              "configMapRef": {
+                "name": "checkout-config"
+              }
+            }
+          ],
+          "image": "busybox:1.36",
+          "name": "checkout",
+          "resources": {
+            "limits": {
+              "memory": "32Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "8Mi"
+            }
+          }
+        }
+      ],
+      "name": "checkout",
+      "ready_replicas": 0,
+      "replicas": 1,
+      "selector": {
+        "app": "checkout"
+      },
+      "template_labels": {
+        "app": "checkout"
+      }
+    }
+  },
+  "deployments": [
+    {
+      "images": [
+        "busybox:1.36"
+      ],
+      "name": "checkout",
+      "ready_replicas": 0,
+      "replicas": 1
+    }
+  ],
+  "events": [
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:05+00:00",
+      "message": "Successfully assigned scenario-01/checkout-8b8bcb9b5-ctjlg to aiops-control-plane",
+      "object": "pod/checkout-8b8bcb9b5-ctjlg",
+      "reason": "Scheduled",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:05+00:00",
+      "message": "Created pod: checkout-8b8bcb9b5-ctjlg",
+      "object": "replicaset/checkout-8b8bcb9b5",
+      "reason": "SuccessfulCreate",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:05+00:00",
+      "message": "Scaled up replica set checkout-8b8bcb9b5 from 0 to 1",
+      "object": "deployment/checkout",
+      "reason": "ScalingReplicaSet",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:06+00:00",
+      "message": "Pulling image \"busybox:1.36\"",
+      "object": "pod/checkout-8b8bcb9b5-ctjlg",
+      "reason": "Pulling",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:17+00:00",
+      "message": "Successfully pulled image \"busybox:1.36\" in 3.338s (10.737s including waiting). Image size: 2217006 bytes.",
+      "object": "pod/checkout-8b8bcb9b5-ctjlg",
+      "reason": "Pulled",
+      "type": "Normal"
+    },
+    {
+      "count": 3,
+      "last_seen": "2026-11-04T16:06:01+00:00",
+      "message": "Back-off restarting failed container checkout in pod checkout-8b8bcb9b5-ctjlg_scenario-01(b8b6deb5-064a-46a8-bc44-5406c3c25d34)",
+      "object": "pod/checkout-8b8bcb9b5-ctjlg",
+      "reason": "BackOff",
+      "type": "Warning"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:06:43+00:00",
+      "message": "Successfully assigned scenario-01/checkout-5787576987-r846n to aiops-control-plane",
+      "object": "pod/checkout-5787576987-r846n",
+      "reason": "Scheduled",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:06:43+00:00",
+      "message": "Created pod: checkout-5787576987-r846n",
+      "object": "replicaset/checkout-5787576987",
+      "reason": "SuccessfulCreate",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:06:43+00:00",
+      "message": "Scaled up replica set checkout-5787576987 from 0 to 1",
+      "object": "deployment/checkout",
+      "reason": "ScalingReplicaSet",
+      "type": "Normal"
+    },
+    {
+      "count": 5,
+      "last_seen": "2026-11-04T16:06:44+00:00",
+      "message": "Container created",
+      "object": "pod/checkout-8b8bcb9b5-ctjlg",
+      "reason": "Created",
+      "type": "Normal"
+    },
+    {
+      "count": 5,
+      "last_seen": "2026-11-04T16:06:44+00:00",
+      "message": "Container started",
+      "object": "pod/checkout-8b8bcb9b5-ctjlg",
+      "reason": "Started",
+      "type": "Normal"
+    },
+    {
+      "count": 4,
+      "last_seen": "2026-11-04T16:06:44+00:00",
+      "message": "Container image \"busybox:1.36\" already present on machine and can be accessed by the pod",
+      "object": "pod/checkout-8b8bcb9b5-ctjlg",
+      "reason": "Pulled",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:06:44+00:00",
+      "message": "Deleted pod: checkout-8b8bcb9b5-ctjlg",
+      "object": "replicaset/checkout-8b8bcb9b5",
+      "reason": "SuccessfulDelete",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:06:44+00:00",
+      "message": "Scaled down replica set checkout-8b8bcb9b5 from 1 to 0",
+      "object": "deployment/checkout",
+      "reason": "ScalingReplicaSet",
+      "type": "Normal"
+    },
+    {
+      "count": 9,
+      "last_seen": "2026-11-04T16:22:34+00:00",
+      "message": "Container started",
+      "object": "pod/checkout-5787576987-r846n",
+      "reason": "Started",
+      "type": "Normal"
+    },
+    {
+      "count": 10,
+      "last_seen": "2026-11-04T16:27:39+00:00",
+      "message": "Container created",
+      "object": "pod/checkout-5787576987-r846n",
+      "reason": "Created",
+      "type": "Normal"
+    },
+    {
+      "count": 12,
+      "last_seen": "2026-11-04T16:38:17+00:00",
+      "message": "Container image \"busybox:1.36\" already present on machine and can be accessed by the pod",
+      "object": "pod/checkout-5787576987-r846n",
+      "reason": "Pulled",
+      "type": "Normal"
+    },
+    {
+      "count": 34,
+      "last_seen": "2026-11-04T16:41:53+00:00",
+      "message": "Back-off restarting failed container checkout in pod checkout-5787576987-r846n_scenario-01(50eccb93-0f51-43f4-9027-d81225d7bccd)",
+      "object": "pod/checkout-5787576987-r846n",
+      "reason": "BackOff",
+      "type": "Warning"
+    }
+  ],
+  "logs": {
+    "checkout-5787576987-r846n": {
+      "current": "checkout v1.4.2 starting\nloading configuration from environment\nFATAL config: PAYMENT_TIMEOUT_MS=\"30s\" is not a valid integer number of milliseconds\n",
+      "previous": "checkout v1.4.2 starting\nloading configuration from environment\nFATAL config: PAYMENT_TIMEOUT_MS=\"30s\" is not a valid integer number of milliseconds\n"
+    }
+  },
+  "namespace": "scenario-01",
+  "pod_details": {
+    "checkout-5787576987-r846n": {
+      "conditions": [
+        {
+          "lastTransitionTime": "2026-11-04T16:06:44+00:00",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastTransitionTime": "2026-11-04T16:06:43+00:00",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastTransitionTime": "2026-11-04T16:38:18+00:00",
+          "message": "containers with unready status: [checkout]",
+          "observedGeneration": 1,
+          "reason": "ContainersNotReady",
+          "status": "False",
+          "type": "Ready"
+        },
+        {
+          "lastTransitionTime": "2026-11-04T16:38:18+00:00",
+          "message": "containers with unready status: [checkout]",
+          "observedGeneration": 1,
+          "reason": "ContainersNotReady",
+          "status": "False",
+          "type": "ContainersReady"
+        },
+        {
+          "lastTransitionTime": "2026-11-04T16:06:43+00:00",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "container_statuses": [
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "8Mi"
+          },
+          "containerID": "containerd://63ebcfd04afed507dd8f1440343e8f6294b00ff2474633477ef0136d432a806b",
+          "image": "docker.io/library/busybox:1.36",
+          "imageID": "docker.io/library/busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662",
+          "lastState": {
+            "terminated": {
+              "containerID": "containerd://63ebcfd04afed507dd8f1440343e8f6294b00ff2474633477ef0136d432a806b",
+              "exitCode": 1,
+              "finishedAt": "2026-11-04T16:38:17+00:00",
+              "reason": "Error",
+              "startedAt": "2026-11-04T16:38:17+00:00"
+            }
+          },
+          "name": "checkout",
+          "ready": false,
+          "resources": {
+            "limits": {
+              "memory": "32Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "8Mi"
+            }
+          },
+          "restartCount": 11,
+          "started": false,
+          "state": {
+            "waiting": {
+              "message": "back-off 5m0s restarting failed container=checkout pod=checkout-5787576987-r846n_scenario-01(50eccb93-0f51-43f4-9027-d81225d7bccd)",
+              "reason": "CrashLoopBackOff"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                10
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-jl68b",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "containers": [
+        {
+          "args": [
+            "echo \"checkout v1.4.2 starting\"\necho \"loading configuration from environment\"\ncase \"$PAYMENT_TIMEOUT_MS\" in\n  ''|*[!0-9]*)\n    echo \"FATAL config: PAYMENT_TIMEOUT_MS=\\\"$PAYMENT_TIMEOUT_MS\\\" is not a valid integer number of milliseconds\"\n    exit 1 ;;\nesac\necho \"ready\"; while true; do sleep 3600; done\n"
+          ],
+          "command": [
+            "sh",
+            "-c"
+          ],
+          "env_from": [
+            {
+              "configMapRef": {
+                "name": "checkout-config"
+              }
+            }
+          ],
+          "image": "busybox:1.36",
+          "name": "checkout",
+          "resources": {
+            "limits": {
+              "memory": "32Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "8Mi"
+            }
+          }
+        }
+      ],
+      "labels": {
+        "app": "checkout",
+        "pod-template-hash": "5787576987"
+      },
+      "name": "checkout-5787576987-r846n",
+      "node": "aiops-control-plane",
+      "phase": "Running",
+      "ready": "0/1",
+      "restarts": 11,
+      "waiting_reasons": [
+        "CrashLoopBackOff"
+      ]
+    }
+  },
+  "pods": [
+    {
+      "labels": {
+        "app": "checkout",
+        "pod-template-hash": "5787576987"
+      },
+      "name": "checkout-5787576987-r846n",
+      "node": "aiops-control-plane",
+      "phase": "Running",
+      "ready": "0/1",
+      "restarts": 11,
+      "waiting_reasons": [
+        "CrashLoopBackOff"
+      ]
+    }
+  ],
+  "service_details": {},
+  "services": []
+}

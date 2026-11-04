@@ -1,6 +1,6 @@
 S ?= 01
 
-.PHONY: cluster-up cluster-down scenario-up scenarios-down test lint
+.PHONY: cluster-up cluster-down scenario-up scenarios-down fixtures test lint
 
 cluster-up:
 	kind get clusters | grep -qx aiops || kind create cluster --config deploy/kind-config.yaml --wait 120s
@@ -15,6 +15,9 @@ scenario-up:
 
 scenarios-down:
 	for f in scenarios/*/manifests.yaml; do kubectl --context kind-aiops delete --ignore-not-found -f $$f; done
+
+fixtures:
+	uv run python scripts/record_fixtures.py
 
 test:
 	uv run pytest

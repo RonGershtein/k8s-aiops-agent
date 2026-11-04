@@ -11,6 +11,7 @@ dependencies = [
     "kubernetes>=37.0.1",
     "pydantic>=2.14.2",
     "pydantic-settings>=2.16.2",
+    "pyyaml>=6.0.3",
 ]
 
 [build-system]
@@ -22,6 +23,7 @@ dev = [
     "mypy>=2.4.1",
     "pytest>=9.2.0",
     "ruff>=0.17.3",
+    "types-pyyaml>=6.0.12.20261103",
 ]
 
 [tool.ruff]

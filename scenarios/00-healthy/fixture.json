@@ -1,0 +1,534 @@
+{
+  "configmaps": {},
+  "deployment_details": {
+    "web": {
+      "available_replicas": 2,
+      "conditions": [
+        {
+          "lastTransitionTime": "2026-11-04T16:05:14+00:00",
+          "lastUpdateTime": "2026-11-04T16:05:14+00:00",
+          "message": "Deployment has minimum availability.",
+          "reason": "MinimumReplicasAvailable",
+          "status": "True",
+          "type": "Available"
+        },
+        {
+          "lastTransitionTime": "2026-11-04T16:05:05+00:00",
+          "lastUpdateTime": "2026-11-04T16:05:14+00:00",
+          "message": "ReplicaSet \"web-76b7db9bd5\" has successfully progressed.",
+          "reason": "NewReplicaSetAvailable",
+          "status": "True",
+          "type": "Progressing"
+        }
+      ],
+      "containers": [
+        {
+          "image": "nginx:1.27-alpine",
+          "name": "nginx",
+          "ports": [
+            {
+              "containerPort": 80,
+              "protocol": "TCP"
+            }
+          ],
+          "readiness_probe": {
+            "failureThreshold": 3,
+            "httpGet": {
+              "path": "/",
+              "port": 80,
+              "scheme": "HTTP"
+            },
+            "periodSeconds": 5,
+            "successThreshold": 1,
+            "timeoutSeconds": 1
+          },
+          "resources": {
+            "limits": {
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "16Mi"
+            }
+          }
+        }
+      ],
+      "name": "web",
+      "ready_replicas": 2,
+      "replicas": 2,
+      "selector": {
+        "app": "web"
+      },
+      "template_labels": {
+        "app": "web"
+      }
+    }
+  },
+  "deployments": [
+    {
+      "images": [
+        "nginx:1.27-alpine"
+      ],
+      "name": "web",
+      "ready_replicas": 2,
+      "replicas": 2
+    }
+  ],
+  "events": [
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:05+00:00",
+      "message": "Successfully assigned scenario-00/web-76b7db9bd5-dmkq9 to aiops-control-plane",
+      "object": "pod/web-76b7db9bd5-dmkq9",
+      "reason": "Scheduled",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:05+00:00",
+      "message": "Successfully assigned scenario-00/web-76b7db9bd5-mb6jz to aiops-control-plane",
+      "object": "pod/web-76b7db9bd5-mb6jz",
+      "reason": "Scheduled",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:05+00:00",
+      "message": "Pulling image \"nginx:1.27-alpine\"",
+      "object": "pod/web-76b7db9bd5-mb6jz",
+      "reason": "Pulling",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:05+00:00",
+      "message": "Created pod: web-76b7db9bd5-mb6jz",
+      "object": "replicaset/web-76b7db9bd5",
+      "reason": "SuccessfulCreate",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:05+00:00",
+      "message": "Created pod: web-76b7db9bd5-dmkq9",
+      "object": "replicaset/web-76b7db9bd5",
+      "reason": "SuccessfulCreate",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:05+00:00",
+      "message": "Scaled up replica set web-76b7db9bd5 from 0 to 2",
+      "object": "deployment/web",
+      "reason": "ScalingReplicaSet",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:06+00:00",
+      "message": "Pulling image \"nginx:1.27-alpine\"",
+      "object": "pod/web-76b7db9bd5-dmkq9",
+      "reason": "Pulling",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:12+00:00",
+      "message": "Successfully pulled image \"nginx:1.27-alpine\" in 6.868s (6.868s including waiting). Image size: 20984244 bytes.",
+      "object": "pod/web-76b7db9bd5-mb6jz",
+      "reason": "Pulled",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:13+00:00",
+      "message": "Successfully pulled image \"nginx:1.27-alpine\" in 1.058s (7.785s including waiting). Image size: 20984244 bytes.",
+      "object": "pod/web-76b7db9bd5-dmkq9",
+      "reason": "Pulled",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:13+00:00",
+      "message": "Container created",
+      "object": "pod/web-76b7db9bd5-mb6jz",
+      "reason": "Created",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:13+00:00",
+      "message": "Container started",
+      "object": "pod/web-76b7db9bd5-mb6jz",
+      "reason": "Started",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:13+00:00",
+      "message": "Readiness probe failed: Get \"http://10.244.0.5:80/\": dial tcp 10.244.0.5:80: connect: connection refused",
+      "object": "pod/web-76b7db9bd5-mb6jz",
+      "reason": "Unhealthy",
+      "type": "Warning"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:14+00:00",
+      "message": "Container created",
+      "object": "pod/web-76b7db9bd5-dmkq9",
+      "reason": "Created",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:14+00:00",
+      "message": "Container started",
+      "object": "pod/web-76b7db9bd5-dmkq9",
+      "reason": "Started",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:05:14+00:00",
+      "message": "Readiness probe failed: Get \"http://10.244.0.6:80/\": dial tcp 10.244.0.6:80: connect: connection refused",
+      "object": "pod/web-76b7db9bd5-dmkq9",
+      "reason": "Unhealthy",
+      "type": "Warning"
+    }
+  ],
+  "logs": {
+    "web-76b7db9bd5-dmkq9": {
+      "current": "10.244.0.1 - - [04/Nov/2026:16:38:14 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:19 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:24 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:29 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:34 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:39 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:44 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:49 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:54 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:59 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:04 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:09 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:14 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:19 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:24 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:29 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:34 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:39 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:44 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:49 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:54 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:59 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:04 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:09 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:14 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:19 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:24 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:29 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:34 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:39 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:44 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:49 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:54 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:59 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:04 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:09 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:14 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:19 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:24 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:29 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:34 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:39 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:44 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:49 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:54 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:59 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:42:04 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:42:09 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:42:14 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:42:19 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n",
+      "previous": "[previous container logs unavailable; showing current container]\n10.244.0.1 - - [04/Nov/2026:16:38:14 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:19 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:24 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:29 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:34 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:39 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:44 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:49 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:54 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:59 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:04 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:09 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:14 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:19 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:24 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:29 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:34 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:39 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:44 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:49 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:54 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:59 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:04 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:09 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:14 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:19 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:24 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:29 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:34 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:39 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:44 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:49 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:54 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:59 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:04 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:09 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:14 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:19 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:24 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:29 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:34 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:39 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:44 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:49 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:54 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:59 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:42:04 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:42:09 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:42:14 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:42:19 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n"
+    },
+    "web-76b7db9bd5-mb6jz": {
+      "current": "10.244.0.1 - - [04/Nov/2026:16:38:13 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:18 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:23 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:28 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:33 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:38 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:43 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:48 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:53 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:58 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:03 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:08 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:13 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:18 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:23 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:28 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:33 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:38 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:43 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:48 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:53 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:58 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:03 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:08 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:13 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:18 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:23 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:28 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:33 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:38 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:43 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:48 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:53 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:58 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:03 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:08 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:13 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:18 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:23 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:28 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:33 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:38 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:43 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:48 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:53 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:58 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:42:03 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:42:08 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:42:13 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:42:18 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n",
+      "previous": "[previous container logs unavailable; showing current container]\n10.244.0.1 - - [04/Nov/2026:16:38:13 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:18 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:23 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:28 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:33 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:38 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:43 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:48 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:53 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:38:58 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:03 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:08 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:13 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:18 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:23 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:28 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:33 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:38 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:43 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:48 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:53 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:39:58 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:03 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:08 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:13 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:18 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:23 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:28 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:33 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:38 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:43 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:48 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:53 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:40:58 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:03 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:08 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:13 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:18 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:23 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:28 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:33 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:38 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:43 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:48 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:53 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:41:58 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:42:03 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:42:08 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:42:13 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n10.244.0.1 - - [04/Nov/2026:16:42:18 +0000] \"GET / HTTP/1.1\" 200 615 \"-\" \"kube-probe/1.37\" \"-\"\n"
+    }
+  },
+  "namespace": "scenario-00",
+  "pod_details": {
+    "web-76b7db9bd5-dmkq9": {
+      "conditions": [
+        {
+          "lastTransitionTime": "2026-11-04T16:05:06+00:00",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastTransitionTime": "2026-11-04T16:05:05+00:00",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastTransitionTime": "2026-11-04T16:05:14+00:00",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastTransitionTime": "2026-11-04T16:05:14+00:00",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "ContainersReady"
+        },
+        {
+          "lastTransitionTime": "2026-11-04T16:05:05+00:00",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "container_statuses": [
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "16Mi"
+          },
+          "containerID": "containerd://06ef8a7229871c3f4873d234753304b6eb0de5de7f169288925e9955fb4dc861",
+          "image": "docker.io/library/nginx:1.27-alpine",
+          "imageID": "docker.io/library/nginx@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10",
+          "lastState": {},
+          "name": "nginx",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "16Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-04T16:05:14+00:00"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                6,
+                10,
+                11,
+                20,
+                26,
+                27
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-g7xcf",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "containers": [
+        {
+          "image": "nginx:1.27-alpine",
+          "name": "nginx",
+          "ports": [
+            {
+              "containerPort": 80,
+              "protocol": "TCP"
+            }
+          ],
+          "readiness_probe": {
+            "failureThreshold": 3,
+            "httpGet": {
+              "path": "/",
+              "port": 80,
+              "scheme": "HTTP"
+            },
+            "periodSeconds": 5,
+            "successThreshold": 1,
+            "timeoutSeconds": 1
+          },
+          "resources": {
+            "limits": {
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "16Mi"
+            }
+          }
+        }
+      ],
+      "labels": {
+        "app": "web",
+        "pod-template-hash": "76b7db9bd5"
+      },
+      "name": "web-76b7db9bd5-dmkq9",
+      "node": "aiops-control-plane",
+      "phase": "Running",
+      "ready": "1/1",
+      "restarts": 0,
+      "waiting_reasons": []
+    },
+    "web-76b7db9bd5-mb6jz": {
+      "conditions": [
+        {
+          "lastTransitionTime": "2026-11-04T16:05:05+00:00",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastTransitionTime": "2026-11-04T16:05:05+00:00",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastTransitionTime": "2026-11-04T16:05:13+00:00",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastTransitionTime": "2026-11-04T16:05:13+00:00",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "ContainersReady"
+        },
+        {
+          "lastTransitionTime": "2026-11-04T16:05:05+00:00",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "container_statuses": [
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "16Mi"
+          },
+          "containerID": "containerd://282297f55b0b5518b063c00dd8129b7a9064e0c48bcb4623660aeea0e1c960c5",
+          "image": "docker.io/library/nginx:1.27-alpine",
+          "imageID": "docker.io/library/nginx@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10",
+          "lastState": {},
+          "name": "nginx",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "16Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-04T16:05:13+00:00"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                6,
+                10,
+                11,
+                20,
+                26,
+                27
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-2zdh2",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "containers": [
+        {
+          "image": "nginx:1.27-alpine",
+          "name": "nginx",
+          "ports": [
+            {
+              "containerPort": 80,
+              "protocol": "TCP"
+            }
+          ],
+          "readiness_probe": {
+            "failureThreshold": 3,
+            "httpGet": {
+              "path": "/",
+              "port": 80,
+              "scheme": "HTTP"
+            },
+            "periodSeconds": 5,
+            "successThreshold": 1,
+            "timeoutSeconds": 1
+          },
+          "resources": {
+            "limits": {
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "16Mi"
+            }
+          }
+        }
+      ],
+      "labels": {
+        "app": "web",
+        "pod-template-hash": "76b7db9bd5"
+      },
+      "name": "web-76b7db9bd5-mb6jz",
+      "node": "aiops-control-plane",
+      "phase": "Running",
+      "ready": "1/1",
+      "restarts": 0,
+      "waiting_reasons": []
+    }
+  },
+  "pods": [
+    {
+      "labels": {
+        "app": "web",
+        "pod-template-hash": "76b7db9bd5"
+      },
+      "name": "web-76b7db9bd5-dmkq9",
+      "node": "aiops-control-plane",
+      "phase": "Running",
+      "ready": "1/1",
+      "restarts": 0,
+      "waiting_reasons": []
+    },
+    {
+      "labels": {
+        "app": "web",
+        "pod-template-hash": "76b7db9bd5"
+      },
+      "name": "web-76b7db9bd5-mb6jz",
+      "node": "aiops-control-plane",
+      "phase": "Running",
+      "ready": "1/1",
+      "restarts": 0,
+      "waiting_reasons": []
+    }
+  ],
+  "service_details": {
+    "web": {
+      "name": "web",
+      "not_ready_endpoints": [],
+      "ports": [
+        {
+          "port": 80,
+          "protocol": "TCP",
+          "targetPort": 80
+        }
+      ],
+      "ready_endpoints": [
+        "web-76b7db9bd5-mb6jz",
+        "web-76b7db9bd5-dmkq9"
+      ],
+      "selector": {
+        "app": "web"
+      },
+      "type": "ClusterIP"
+    }
+  },
+  "services": [
+    {
+      "name": "web",
+      "selector": {
+        "app": "web"
+      },
+      "type": "ClusterIP"
+    }
+  ]
+}
