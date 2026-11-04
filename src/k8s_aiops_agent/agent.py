@@ -19,7 +19,7 @@ from k8s_aiops_agent.config import AgentSettings
 from k8s_aiops_agent.kube import KubeError, KubeGateway
 from k8s_aiops_agent.llm import ChatModel, ModelError
 from k8s_aiops_agent.prompts import FINALIZE_PROMPT, NO_TOOL_CALL_PROMPT, SYSTEM_PROMPT
-from k8s_aiops_agent.remediation import SelectorPatcher, build_proposal, endpoints_cover
+from k8s_aiops_agent.remediation import SelectorPatcher, build_proposal, routes_to
 from k8s_aiops_agent.schemas import (
     Diagnosis,
     Evidence,
@@ -269,6 +269,8 @@ def build_graph(
         records: list[ToolRecord] = []
         with observe("remediation.verify", "span", input_value=args) as span:
             for attempt in range(VERIFY_ATTEMPTS):
+                if attempt:
+                    time.sleep(VERIFY_INTERVAL_SECONDS)
                 record = run_tool(
                     kube,
                     f"v{ledger_size + attempt + 1}",
@@ -278,15 +280,10 @@ def build_graph(
                     settings.max_tool_output_chars,
                 )
                 records.append(record)
-                if not record.error and endpoints_cover(
-                    json.loads(record.output), proposal.matching_ready_pods
-                ):
+                if routes_to(record, proposal.matching_ready_pods):
                     break
-                time.sleep(VERIFY_INTERVAL_SECONDS)
             last = records[-1]
-            resolved = not last.error and endpoints_cover(
-                json.loads(last.output), proposal.matching_ready_pods
-            )
+            resolved = routes_to(last, proposal.matching_ready_pods)
             set_output(span, {"resolved": resolved, "attempts": len(records)})
         outcome = RemediationOutcome(
             approved=True,

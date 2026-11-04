@@ -1,5 +1,6 @@
 """The one supported write action: replace a Service's label selector, after human approval."""
 
+import json
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -7,6 +8,7 @@ from kubernetes import client, config
 
 from k8s_aiops_agent.kube import Json, KubeError, KubeGateway, call_api
 from k8s_aiops_agent.schemas import RemediationProposal, ServiceSelectorFix
+from k8s_aiops_agent.tools import ToolRecord
 
 
 class SelectorPatcher(Protocol):
@@ -64,7 +66,14 @@ def build_proposal(
     )
 
 
-def endpoints_cover(service: Json, pods: list[str]) -> bool:
+def routes_to(record: ToolRecord, pods: list[str]) -> bool:
+    """True when a get_service_and_endpoints record lists every given pod as a ready endpoint."""
+    if record.error:
+        return False
+    try:
+        service = json.loads(record.output)
+    except ValueError:  # truncated or redacted output is not proof of success
+        return False
     return set(pods) <= set(service.get("ready_endpoints", []))
 
 

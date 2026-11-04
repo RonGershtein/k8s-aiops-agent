@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -260,6 +261,23 @@ def test_remediation_declined_changes_nothing() -> None:
     assert cluster.patches == []
     assert result.remediation is not None
     assert not result.remediation.approved
+
+
+def test_remediation_that_never_converges_checks_each_attempt_and_sleeps_between(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr(agent_module.time, "sleep", sleeps.append)
+    cluster = FakeCluster()
+    ignore_patch = Remediation(patcher=MagicMock(), approve=lambda proposal: True)
+
+    result = investigate(
+        "q", "scenario-03", settings(), cluster, ScriptedModel(selector_fix_turns()), ignore_patch
+    )
+
+    assert result.remediation is not None
+    assert not result.remediation.resolved
+    assert len(sleeps) == agent_module.VERIFY_ATTEMPTS - 1
 
 
 def test_remediation_selector_matching_no_ready_pods_is_never_proposed() -> None:
