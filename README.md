@@ -300,7 +300,10 @@ The real boundary is **RBAC**, not the prompt. Each layer below assumes the one 
   time-dependent behaviour such as restart counts and event ages is frozen. The live eval mode
   covers the rest.
 - **Token budget counts cached input at full size.** Simple and conservative. A cost-weighted
-  budget would let longer investigations through.
+  budget would let longer investigations through. Sizing: the first call is about 2.1k tokens
+  (prompt plus tool schemas), and each tool round adds about 0.1–1.3k. The scripted runs total
+  5–10k, so the 60k default only cuts in around turn 9–10, before `max_steps`, and then forces
+  a final answer instead of failing. Calibrate it against real-Claude eval token counts.
 - **Cluster discovery is intentionally narrow.** There are no nodes, PVCs, jobs, ingresses or
   metrics yet. Each would be one more typed tool plus RBAC rule, and a new scenario to prove it.
 - **The judge uses the same model family as the agent.** Using a different judge model, or human
