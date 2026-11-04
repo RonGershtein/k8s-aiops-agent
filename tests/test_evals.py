@@ -1,13 +1,17 @@
+import json
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
+from k8s_aiops_agent import evals
 from k8s_aiops_agent.evals import (
     Expected,
     JudgeScore,
     Scenario,
     deterministic_checks,
     load_scenarios,
+    push_scores,
     run_evals,
     trial_result,
 )
@@ -158,3 +162,37 @@ def test_run_evals_offline_runs_every_trial_and_reports_each_result(kube: Fixtur
 
     assert len(results) == len(reported) == 2 * len(scenarios)
     assert all(trial.passed for trial in results)
+
+
+def test_push_scores_attaches_checks_and_judge_scores_to_the_trace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    urlopen = MagicMock()
+    monkeypatch.setattr(evals.urllib.request, "urlopen", urlopen)
+    settings = make_settings(langfuse_public_key="pk", langfuse_secret_key="sk")
+    score = JudgeScore(correctness=5, evidence_support=4, action_safety=5, rationale="ok")
+    trial = trial_result(SCENARIO, 1, result(), settings, lambda s, r: score).model_copy(
+        update={"trace_id": "abc"}
+    )
+
+    push_scores(settings, trial)
+    request = urlopen.call_args.args[0]
+    scores = json.loads(request.data)
+    values = {score["name"]: score["value"] for score in scores}
+    trace_ids = {score["traceId"] for score in scores}
+
+    assert request.full_url == "http://localhost:3000/api/public/scores"
+    assert request.get_header("Authorization") == "Basic cGs6c2s="
+    assert values["passed"] == 1
+    assert values["judge_evidence_support"] == 4
+    assert trace_ids == {"abc"}
+
+
+def test_push_scores_without_langfuse_keys_sends_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    urlopen = MagicMock()
+    monkeypatch.setattr(evals.urllib.request, "urlopen", urlopen)
+    trial = trial_result(SCENARIO, 1, result(), SETTINGS, None)
+
+    push_scores(SETTINGS, trial)
+
+    urlopen.assert_not_called()
