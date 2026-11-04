@@ -11,7 +11,14 @@ from rich.tree import Tree
 
 from k8s_aiops_agent.agent import Remediation, investigate
 from k8s_aiops_agent.config import AgentSettings, KubeBackend, LlmProvider
-from k8s_aiops_agent.evals import ClaudeJudge, TrialResult, load_scenarios, render_report, run_evals
+from k8s_aiops_agent.evals import (
+    ClaudeJudge,
+    GeminiJudge,
+    TrialResult,
+    load_scenarios,
+    render_report,
+    run_evals,
+)
 from k8s_aiops_agent.fixture_kube import FixtureKube
 from k8s_aiops_agent.kube import KubeGateway, LiveKube
 from k8s_aiops_agent.llm import build_model
@@ -60,7 +67,12 @@ def investigate_command(
 @app.command("eval")
 def eval_command(
     trials: Annotated[int, typer.Option(min=1, help="Runs per scenario.")] = 1,
-    judge: Annotated[bool, typer.Option(help="Also score each run with the Claude judge.")] = False,
+    judge: Annotated[
+        bool,
+        typer.Option(
+            help="Also score each run with an LLM judge (Gemini if provider, else Claude)."
+        ),
+    ] = False,
     held_out: Annotated[bool, typer.Option(help="Include held-out scenarios.")] = True,
     scenario: Annotated[list[str] | None, typer.Option(help="Only these scenario ids.")] = None,
     backend: Annotated[KubeBackend | None, typer.Option()] = None,
@@ -76,11 +88,12 @@ def eval_command(
     missing = {s.namespace for s in scenarios} - set(settings.allowed_namespaces)
     if missing:
         raise _usage_error(f"add {sorted(missing)} to AGENT_ALLOWED_NAMESPACES")
-    if judge and settings.anthropic_api_key is None:
-        raise _usage_error("--judge needs ANTHROPIC_API_KEY")
+    gemini = settings.llm_provider is LlmProvider.GEMINI
+    if judge and not gemini and settings.anthropic_api_key is None:
+        raise _usage_error("--judge needs ANTHROPIC_API_KEY (or AGENT_LLM_PROVIDER=gemini)")
     setup_tracing(settings)
     kube = _build_kube(settings)
-    grader = ClaudeJudge(settings) if judge else None
+    grader = (GeminiJudge(settings) if gemini else ClaudeJudge(settings)) if judge else None
 
     def print_result(result: TrialResult) -> None:
         mark = "[green]pass[/]" if result.passed else "[red]FAIL[/]"

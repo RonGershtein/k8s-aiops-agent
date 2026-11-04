@@ -2,11 +2,13 @@ import json
 from typing import Any
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 
 from k8s_aiops_agent import evals
 from k8s_aiops_agent.evals import (
     Expected,
+    GeminiJudge,
     JudgeScore,
     Scenario,
     deterministic_checks,
@@ -17,7 +19,14 @@ from k8s_aiops_agent.evals import (
 )
 from k8s_aiops_agent.fixture_kube import FixtureKube
 from k8s_aiops_agent.schemas import Diagnosis, InvestigationResult, RunStats
-from tests.builders import SCENARIOS_DIR, SCRIPTS_DIR, make_settings, scripted_model
+from tests.builders import (
+    SCENARIOS_DIR,
+    SCRIPTS_DIR,
+    gemini_settings,
+    make_settings,
+    mock_http,
+    scripted_model,
+)
 
 SETTINGS = make_settings()
 SCENARIO = Scenario(
@@ -196,3 +205,14 @@ def test_push_scores_without_langfuse_keys_sends_nothing(monkeypatch: pytest.Mon
     push_scores(SETTINGS, trial)
 
     urlopen.assert_not_called()
+
+
+def test_gemini_judge_parses_the_json_score() -> None:
+    score = JudgeScore(correctness=5, evidence_support=4, action_safety=5, rationale="ok")
+    reply = {"choices": [{"message": {"content": score.model_dump_json()}}]}
+    client, _ = mock_http(httpx.Response(200, json=reply))
+    judge = GeminiJudge(gemini_settings(), client)
+
+    graded = judge(SCENARIO, result())
+
+    assert graded == score

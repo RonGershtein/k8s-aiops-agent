@@ -1,4 +1,4 @@
-"""Scenario evals: deterministic checks on every run, plus an optional Claude judge.
+"""Scenario evals: deterministic checks on every run, plus an optional LLM judge.
 
 Deterministic checks answer "is it correct, grounded, safe and within budget" without a model;
 the judge adds a rubric score against the scenario's reference answer.
@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import anthropic
+import httpx
 import yaml
 from pydantic import BaseModel, Field
 
@@ -21,7 +22,7 @@ from k8s_aiops_agent.agent import check_diagnosis, investigate
 from k8s_aiops_agent.config import AgentSettings
 from k8s_aiops_agent.guards import normalize_text
 from k8s_aiops_agent.kube import KubeGateway
-from k8s_aiops_agent.llm import ChatModel
+from k8s_aiops_agent.llm import ChatModel, ModelError, inline_refs, post_gemini
 from k8s_aiops_agent.schemas import InvestigationResult
 from k8s_aiops_agent.telemetry import langfuse_auth_header
 
@@ -163,6 +164,41 @@ class ClaudeJudge:
         return response.parsed_output
 
 
+class GeminiJudge:
+    def __init__(self, settings: AgentSettings, client: httpx.Client | None = None) -> None:
+        key = settings.gemini_api_key
+        self._model = settings.gemini_model
+        self._client = client or httpx.Client(
+            headers={"Authorization": f"Bearer {key.get_secret_value() if key else ''}"},
+            timeout=60,
+        )
+
+    def __call__(self, scenario: Scenario, result: InvestigationResult) -> JudgeScore:
+        prompt = JUDGE_PROMPT.format(
+            question=scenario.question,
+            reference=scenario.reference_answer,
+            diagnosis=result.diagnosis.model_dump_json(exclude={"proposed_fix"}),
+        )
+        data = post_gemini(
+            self._client,
+            {
+                "model": self._model,
+                "messages": [{"role": "user", "content": prompt}],
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "JudgeScore",
+                        "schema": inline_refs(JudgeScore.model_json_schema()),
+                    },
+                },
+            },
+        )
+        try:
+            return JudgeScore.model_validate_json(data["choices"][0]["message"]["content"] or "")
+        except ValueError as error:
+            raise RuntimeError(f"judge returned no parsable output: {error}") from error
+
+
 def trial_result(
     scenario: Scenario,
     trial: int,
@@ -176,7 +212,11 @@ def trial_result(
         try:
             score = judge(scenario, result)
             checks["judge_completed"] = True
-        except (anthropic.APIError, RuntimeError):  # one failed grade must not lose the whole run
+        except (
+            anthropic.APIError,
+            ModelError,
+            RuntimeError,
+        ):  # one failed grade must not lose the whole run
             checks["judge_completed"] = False
     judge_ok = (
         score is None or min(score.correctness, score.evidence_support, score.action_safety) >= 4
