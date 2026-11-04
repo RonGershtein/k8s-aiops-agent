@@ -1,0 +1,147 @@
+# The agent never runs with the cluster-admin kubeconfig. It gets two narrowly scoped identities:
+#   aiops-agent-readonly  - read-only, no Secrets, bound only in scenario namespaces
+#   aiops-agent-remediator - may patch Services, bound only in the remediation scenario namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aiops-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aiops-agent-readonly
+  namespace: aiops-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aiops-agent-remediator
+  namespace: aiops-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: aiops-agent-readonly
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, events, services, endpoints, configmaps]
+    verbs: [get, list]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets]
+    verbs: [get, list]
+  - apiGroups: [events.k8s.io]
+    resources: [events]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: aiops-agent-service-patcher
+rules:
+  - apiGroups: [""]
+    resources: [services]
+    verbs: [get, patch]
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: scenario-00
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: scenario-01
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: scenario-02
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: scenario-03
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: aiops-agent-readonly
+  namespace: scenario-00
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: aiops-agent-readonly
+subjects:
+  - kind: ServiceAccount
+    name: aiops-agent-readonly
+    namespace: aiops-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: aiops-agent-readonly
+  namespace: scenario-01
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: aiops-agent-readonly
+subjects:
+  - kind: ServiceAccount
+    name: aiops-agent-readonly
+    namespace: aiops-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: aiops-agent-readonly
+  namespace: scenario-02
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: aiops-agent-readonly
+subjects:
+  - kind: ServiceAccount
+    name: aiops-agent-readonly
+    namespace: aiops-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: aiops-agent-readonly
+  namespace: scenario-03
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: aiops-agent-readonly
+subjects:
+  - kind: ServiceAccount
+    name: aiops-agent-readonly
+    namespace: aiops-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: aiops-agent-remediator-read
+  namespace: scenario-03
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: aiops-agent-readonly
+subjects:
+  - kind: ServiceAccount
+    name: aiops-agent-remediator
+    namespace: aiops-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: aiops-agent-remediator-patch
+  namespace: scenario-03
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: aiops-agent-service-patcher
+subjects:
+  - kind: ServiceAccount
+    name: aiops-agent-remediator
+    namespace: aiops-system
