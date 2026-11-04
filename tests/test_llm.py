@@ -170,3 +170,21 @@ def test_gemini_rate_limit_retries_then_raises(
         model.create("system", [], [])
 
     assert len(sent) == attempts
+
+
+def test_gemini_malformed_reply_raises_model_error() -> None:
+    client, _ = mock_http(httpx.Response(200, json={"unexpected": True}))
+    model = GeminiModel(gemini_settings(), client)
+
+    with pytest.raises(ModelError, match="unexpected response"):
+        model.create("system", [], [])
+
+
+def test_gemini_invalid_tool_arguments_raise_model_error() -> None:
+    reply = json.loads(json.dumps(GEMINI_TOOL_CALL))
+    reply["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"] = "{not json"
+    client, _ = mock_http(httpx.Response(200, json=reply))
+    model = GeminiModel(gemini_settings(), client)
+
+    with pytest.raises(ModelError, match="invalid tool arguments"):
+        model.create("system", [], [])

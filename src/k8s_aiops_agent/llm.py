@@ -13,6 +13,7 @@ from typing import Any, Protocol
 import anthropic
 import httpx
 import yaml
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
 from k8s_aiops_agent.config import AgentSettings, LlmProvider
 
@@ -25,6 +26,44 @@ ERROR_BODY_CHARS = 300
 
 class ModelError(Exception):
     """The model call failed after the SDK's own retries."""
+
+
+class GeminiFunction(BaseModel):
+    name: str
+    arguments: str = "{}"
+
+
+class GeminiToolCall(BaseModel):
+    id: str
+    function: GeminiFunction
+    # Gemini 3 thought signature: must be sent back unchanged with the call.
+    extra_content: dict[str, Any] | None = None
+
+
+class GeminiMessage(BaseModel):
+    content: str | None = None
+    tool_calls: list[GeminiToolCall] = Field(default_factory=list)
+
+
+class GeminiChoice(BaseModel):
+    message: GeminiMessage
+    finish_reason: str | None = None
+
+
+class GeminiUsage(BaseModel):
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+
+
+class GeminiResponse(BaseModel):
+    """The parts of an OpenAI-compatible chat completion the agent reads, validated."""
+
+    choices: list[GeminiChoice] = Field(min_length=1)
+    usage: GeminiUsage = Field(default_factory=GeminiUsage)
+    model: str | None = None
+
+
+TOOL_ARGUMENTS = TypeAdapter(dict[str, Any])
 
 
 @dataclass(frozen=True)
@@ -107,34 +146,33 @@ class GeminiModel:
     ) -> ModelTurn:
         body = gemini_request(self.name, system, messages, tools)
         body["max_tokens"] = self._settings.max_output_tokens
-        data = post_gemini(self._client, self._settings.gemini_base_url, body)
-        message = data["choices"][0]["message"]
+        reply = post_gemini(self._client, self._settings.gemini_base_url, body)
+        choice = reply.choices[0]
         content: list[dict[str, Any]] = []
-        if message.get("content"):
-            content.append({"type": "text", "text": message["content"]})
-        for call in message.get("tool_calls") or []:
-            block = {
-                "type": "tool_use",
-                "id": call["id"],
-                "name": call["function"]["name"],
-                "input": json.loads(call["function"]["arguments"] or "{}"),
-            }
-            if "extra_content" in call:  # Gemini 3 thought signature: must be sent back as-is
-                block["extra_content"] = call["extra_content"]
-            content.append(block)
-        usage = data.get("usage") or {}
+        if choice.message.content:
+            content.append({"type": "text", "text": choice.message.content})
+        content += [_tool_use_block(call) for call in choice.message.tool_calls]
         return ModelTurn(
             content=content,
-            stop_reason="tool_use"
-            if message.get("tool_calls")
-            else str(data["choices"][0].get("finish_reason")),
-            input_tokens=usage.get("prompt_tokens", 0),
-            output_tokens=usage.get("completion_tokens", 0),
-            model=data.get("model", self.name),
+            stop_reason="tool_use" if choice.message.tool_calls else str(choice.finish_reason),
+            input_tokens=reply.usage.prompt_tokens,
+            output_tokens=reply.usage.completion_tokens,
+            model=reply.model or self.name,
         )
 
 
-def post_gemini(client: httpx.Client, base_url: str, body: dict[str, Any]) -> dict[str, Any]:
+def _tool_use_block(call: GeminiToolCall) -> dict[str, Any]:
+    try:
+        arguments = TOOL_ARGUMENTS.validate_json(call.function.arguments or "{}")
+    except ValidationError as error:
+        raise ModelError(f"Gemini sent invalid tool arguments for {call.function.name}") from error
+    block = {"type": "tool_use", "id": call.id, "name": call.function.name, "input": arguments}
+    if call.extra_content is not None:
+        block["extra_content"] = call.extra_content
+    return block
+
+
+def post_gemini(client: httpx.Client, base_url: str, body: dict[str, Any]) -> GeminiResponse:
     """POST with a short back-off on 429: the free tier allows only a few requests a minute."""
     try:
         for attempt in range(GEMINI_RATE_LIMIT_RETRIES + 1):
@@ -151,8 +189,10 @@ def post_gemini(client: httpx.Client, base_url: str, body: dict[str, Any]) -> di
         raise ModelError(f"Gemini API error {error.response.status_code}: {detail}") from error
     except httpx.HTTPError as error:
         raise ModelError(f"Gemini API unreachable: {error}") from error
-    data: dict[str, Any] = response.json()
-    return data
+    try:
+        return GeminiResponse.model_validate_json(response.content)
+    except ValidationError as error:
+        raise ModelError(f"Gemini returned an unexpected response: {error}") from error
 
 
 def gemini_request(

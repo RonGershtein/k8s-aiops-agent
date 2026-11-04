@@ -198,7 +198,7 @@ class GeminiJudge:
             reference=scenario.reference_answer,
             diagnosis=result.diagnosis.model_dump_json(exclude={"proposed_fix"}),
         )
-        data = post_gemini(
+        reply = post_gemini(
             self._client,
             self._base_url,
             {
@@ -214,7 +214,7 @@ class GeminiJudge:
             },
         )
         try:
-            return JudgeScore.model_validate_json(data["choices"][0]["message"]["content"] or "")
+            return JudgeScore.model_validate_json(reply.choices[0].message.content or "")
         except ValueError as error:
             raise RuntimeError(f"judge returned no parsable output: {error}") from error
 
