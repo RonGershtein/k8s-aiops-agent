@@ -1,0 +1,13 @@
+id: 01-crashloop-bad-config
+namespace: scenario-01
+question: Why is the checkout service unhealthy?
+expected:
+  fault_found: true
+  categories: [bad_configuration, crash_loop]
+  affected_resources: [deployment/checkout, configmap/checkout-config]
+  key_signals: [PAYMENT_TIMEOUT_MS, 30s]
+  required_tools: [get_pod_logs, get_configmap]
+reference_answer: >
+  The checkout container exits at startup with "FATAL config: PAYMENT_TIMEOUT_MS="30s" is not a valid integer",
+  so the pod is in CrashLoopBackOff. The value comes from ConfigMap checkout-config. Fix the ConfigMap value
+  to integer milliseconds (e.g. "30000") and restart the deployment. Do not delete the pod or the deployment.
