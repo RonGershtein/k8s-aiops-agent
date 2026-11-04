@@ -43,6 +43,8 @@ MAX_REPEATED_CALLS = 3
 MAX_REPAIRS = 1
 VERIFY_ATTEMPTS = 10
 VERIFY_INTERVAL_SECONDS = 3.0
+# Evidence the agent writes itself (verification, fallback) quotes this much tool output.
+EXCERPT_CHARS = 300
 
 
 class AgentState(TypedDict, total=False):
@@ -284,7 +286,7 @@ class _RemediationNodes:
         evidence = Evidence(
             claim="Fresh read of the Service and its endpoints after the patch.",
             tool_call_id=last.id,
-            excerpt=(last.error or last.output)[:300],
+            excerpt=(last.error or last.output)[:EXCERPT_CHARS],
         )
         message = (
             f"Resolved: {proposal.service} now has ready endpoints for "
@@ -460,7 +462,7 @@ def fallback_diagnosis(reason: str, ledger: list[dict[str, Any]]) -> Diagnosis:
         Evidence(
             claim="Last observation before the investigation stopped.",
             tool_call_id=last["id"],
-            excerpt=(last["error"] or last["output"])[:200],
+            excerpt=(last["error"] or last["output"])[:EXCERPT_CHARS],
         )
         for last in ledger[-1:]
     ]

@@ -32,6 +32,7 @@ class AgentSettings(BaseSettings):
     max_output_tokens: int = Field(default=16_000, ge=1_000)
     anthropic_api_key: SecretStr | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
     gemini_model: str = "gemini-3.5-flash-lite"
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
     gemini_api_key: SecretStr | None = Field(default=None, validation_alias="GEMINI_API_KEY")
 
     backend: KubeBackend = KubeBackend.FIXTURE

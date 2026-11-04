@@ -12,6 +12,7 @@ Json = dict[str, Any]
 
 REQUEST_TIMEOUT_SECONDS = 10
 MAX_EVENTS = 30
+DEFAULT_LOG_LINES = 100
 _LOGS_GONE = "unable to retrieve container logs"
 PREVIOUS_LOGS_UNAVAILABLE = "[previous container logs unavailable; showing current container]\n"
 
@@ -34,7 +35,7 @@ class KubeGateway(Protocol):
         name: str,
         container: str | None = None,
         previous: bool = False,
-        tail_lines: int = 100,
+        tail_lines: int = DEFAULT_LOG_LINES,
     ) -> str: ...
     def get_events(self, namespace: str, involved_object: str | None = None) -> list[Json]: ...
     def get_deployment(self, namespace: str, name: str) -> Json: ...
@@ -94,7 +95,7 @@ class LiveKube:
         name: str,
         container: str | None = None,
         previous: bool = False,
-        tail_lines: int = 100,
+        tail_lines: int = DEFAULT_LOG_LINES,
     ) -> str:
         def read(prev: bool) -> str:
             logs: str = call_api(

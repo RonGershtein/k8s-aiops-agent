@@ -17,8 +17,10 @@ import yaml
 from k8s_aiops_agent.config import AgentSettings, LlmProvider
 
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 GEMINI_RATE_LIMIT_RETRIES = 3
+GEMINI_RETRY_AFTER_DEFAULT_SECONDS = 10.0
+GEMINI_RETRY_AFTER_MAX_SECONDS = 30.0
+ERROR_BODY_CHARS = 300
 
 
 class ModelError(Exception):
@@ -105,7 +107,7 @@ class GeminiModel:
     ) -> ModelTurn:
         body = gemini_request(self.name, system, messages, tools)
         body["max_tokens"] = self._settings.max_output_tokens
-        data = post_gemini(self._client, body)
+        data = post_gemini(self._client, self._settings.gemini_base_url, body)
         message = data["choices"][0]["message"]
         content: list[dict[str, Any]] = []
         if message.get("content"):
@@ -132,19 +134,21 @@ class GeminiModel:
         )
 
 
-def post_gemini(client: httpx.Client, body: dict[str, Any]) -> dict[str, Any]:
+def post_gemini(client: httpx.Client, base_url: str, body: dict[str, Any]) -> dict[str, Any]:
     """POST with a short back-off on 429: the free tier allows only a few requests a minute."""
     try:
         for attempt in range(GEMINI_RATE_LIMIT_RETRIES + 1):
-            response = client.post(GEMINI_URL, json=body)
+            response = client.post(f"{base_url.rstrip('/')}/chat/completions", json=body)
             if response.status_code != 429 or attempt == GEMINI_RATE_LIMIT_RETRIES:
                 break
-            time.sleep(min(float(response.headers.get("retry-after", 10)), 30))
+            retry_after = float(
+                response.headers.get("retry-after", GEMINI_RETRY_AFTER_DEFAULT_SECONDS)
+            )
+            time.sleep(min(retry_after, GEMINI_RETRY_AFTER_MAX_SECONDS))
         response.raise_for_status()
     except httpx.HTTPStatusError as error:
-        raise ModelError(
-            f"Gemini API error {error.response.status_code}: {error.response.text[:300]}"
-        ) from error
+        detail = error.response.text[:ERROR_BODY_CHARS]
+        raise ModelError(f"Gemini API error {error.response.status_code}: {detail}") from error
     except httpx.HTTPError as error:
         raise ModelError(f"Gemini API unreachable: {error}") from error
     data: dict[str, Any] = response.json()

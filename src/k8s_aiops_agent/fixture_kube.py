@@ -5,7 +5,13 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from k8s_aiops_agent.kube import PREVIOUS_LOGS_UNAVAILABLE, Json, KubeError, KubeGateway
+from k8s_aiops_agent.kube import (
+    DEFAULT_LOG_LINES,
+    PREVIOUS_LOGS_UNAVAILABLE,
+    Json,
+    KubeError,
+    KubeGateway,
+)
 
 FIXTURE_FILE = "fixture.json"
 RECORDED_LOG_LINES = 50
@@ -78,7 +84,7 @@ class FixtureKube:
         name: str,
         container: str | None = None,
         previous: bool = False,
-        tail_lines: int = 100,
+        tail_lines: int = DEFAULT_LOG_LINES,
     ) -> str:
         # shortcut: `container` is ignored because every scenario pod has one container;
         # record per container if a multi-container scenario is added.

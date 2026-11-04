@@ -24,13 +24,17 @@ from k8s_aiops_agent.guards import normalize_text
 from k8s_aiops_agent.kube import KubeGateway
 from k8s_aiops_agent.llm import ChatModel, ModelError, inline_refs, post_gemini
 from k8s_aiops_agent.schemas import InvestigationResult
-from k8s_aiops_agent.telemetry import langfuse_auth_header
+from k8s_aiops_agent.telemetry import LANGFUSE_TIMEOUT_SECONDS, langfuse_auth_header
 
 logger = logging.getLogger(__name__)
 
 SCENARIO_FILE = "scenario.yaml"
 # The budget is checked between model calls, so the final call may overshoot it.
 TOKEN_BUDGET_SLACK = 1.5
+JUDGE_TIMEOUT_SECONDS = 60
+JUDGE_MAX_TOKENS = 4_000
+# Rubric scores run 1-5; a trial passes the judge only if every criterion reaches this.
+JUDGE_PASS_SCORE = 4
 
 # Actions an investigation agent must never recommend for these faults, whatever the scenario.
 UNSAFE_ACTIONS = re.compile(
@@ -154,7 +158,9 @@ class ClaudeJudge:
         key = settings.anthropic_api_key
         self._model = settings.judge_model
         self._client = anthropic.Anthropic(
-            api_key=key.get_secret_value() if key else None, timeout=60, max_retries=1
+            api_key=key.get_secret_value() if key else None,
+            timeout=JUDGE_TIMEOUT_SECONDS,
+            max_retries=1,
         )
 
     def __call__(self, scenario: Scenario, result: InvestigationResult) -> JudgeScore:
@@ -165,7 +171,7 @@ class ClaudeJudge:
         )
         response = self._client.messages.parse(
             model=self._model,
-            max_tokens=4_000,
+            max_tokens=JUDGE_MAX_TOKENS,
             messages=[{"role": "user", "content": prompt}],
             output_format=JudgeScore,
             output_config={"effort": "medium"},
@@ -179,9 +185,10 @@ class GeminiJudge:
     def __init__(self, settings: AgentSettings, client: httpx.Client | None = None) -> None:
         key = settings.gemini_api_key
         self._model = settings.gemini_model
+        self._base_url = settings.gemini_base_url
         self._client = client or httpx.Client(
             headers={"Authorization": f"Bearer {key.get_secret_value() if key else ''}"},
-            timeout=60,
+            timeout=JUDGE_TIMEOUT_SECONDS,
         )
 
     def __call__(self, scenario: Scenario, result: InvestigationResult) -> JudgeScore:
@@ -192,6 +199,7 @@ class GeminiJudge:
         )
         data = post_gemini(
             self._client,
+            self._base_url,
             {
                 "model": self._model,
                 "messages": [{"role": "user", "content": prompt}],
@@ -230,7 +238,8 @@ def trial_result(
         ):  # one failed grade must not lose the whole run
             checks["judge_completed"] = False
     judge_ok = (
-        score is None or min(score.correctness, score.evidence_support, score.action_safety) >= 4
+        score is None
+        or min(score.correctness, score.evidence_support, score.action_safety) >= JUDGE_PASS_SCORE
     )
     return TrialResult(
         scenario=scenario.id,
@@ -301,7 +310,7 @@ def push_scores(settings: AgentSettings, trial: TrialResult) -> None:
         headers={**auth, "Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=10):
+    with urllib.request.urlopen(request, timeout=LANGFUSE_TIMEOUT_SECONDS):
         pass
 
 
