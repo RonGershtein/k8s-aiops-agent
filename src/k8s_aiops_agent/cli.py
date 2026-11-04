@@ -139,16 +139,23 @@ def _load_settings(backend: KubeBackend | None, llm: LlmProvider | None) -> Agen
 def _build_kube(settings: AgentSettings) -> KubeGateway:
     if settings.backend is KubeBackend.FIXTURE:
         return FixtureKube.from_dir(settings.fixtures_dir)
-    if settings.kubeconfig is None or not settings.kubeconfig.exists():
+    if settings.kubeconfig is None:
         raise _fail("live backend needs AGENT_KUBECONFIG (run `make cluster-up`)")
-    return LiveKube.from_kubeconfig(settings.kubeconfig)
+    try:
+        return LiveKube.from_kubeconfig(settings.kubeconfig)
+    except OSError as error:
+        raise _fail(f"cannot read kubeconfig {settings.kubeconfig}: {error}") from error
 
 
 def _build_remediation(settings: AgentSettings) -> Remediation:
     path = settings.remediator_kubeconfig
-    if settings.backend is not KubeBackend.LIVE or path is None or not path.exists():
+    if settings.backend is not KubeBackend.LIVE or path is None:
         raise _fail("--allow-remediation needs the live backend and AGENT_REMEDIATOR_KUBECONFIG")
-    return Remediation(patcher=LiveSelectorPatcher.from_kubeconfig(path), approve=_ask_approval)
+    try:
+        patcher = LiveSelectorPatcher.from_kubeconfig(path)
+    except OSError as error:
+        raise _fail(f"cannot read kubeconfig {path}: {error}") from error
+    return Remediation(patcher=patcher, approve=_ask_approval)
 
 
 def _ask_approval(proposal: RemediationProposal) -> bool:

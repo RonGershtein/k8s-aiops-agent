@@ -1,0 +1,10 @@
+.git
+.venv
+.env
+.kube
+traces
+**/__pycache__
+.mypy_cache
+.pytest_cache
+.ruff_cache
+evals/results
