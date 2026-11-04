@@ -47,11 +47,11 @@ cluster-down:
 # apply creates what is missing; replace then restores the exact manifest (also after `make fix`).
 scenario-up:
 	kubectl --context kind-aiops apply -f scenarios/$(S)-*/manifests.yaml
-	kubectl --context kind-aiops replace -f scenarios/$(S)-*/manifests.yaml >/dev/null
+	kubectl --context kind-aiops replace --save-config -f scenarios/$(S)-*/manifests.yaml >/dev/null
 
 scenarios-up:
 	for f in scenarios/*/manifests.yaml; do \
-		kubectl --context kind-aiops apply -f $$f && kubectl --context kind-aiops replace -f $$f >/dev/null; \
+		kubectl --context kind-aiops apply -f $$f && kubectl --context kind-aiops replace --save-config -f $$f >/dev/null; \
 	done
 	kubectl --context kind-aiops -n scenario-03 rollout status deploy/frontend --timeout=180s
 
