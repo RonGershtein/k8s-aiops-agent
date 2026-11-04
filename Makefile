@@ -1,15 +1,21 @@
 S ?= 01
+Q ?= What is wrong in this namespace?
 
-.PHONY: up cluster-up cluster-down scenario-up scenarios-up scenarios-down fixtures test lint eval
+.PHONY: up run cluster-up cluster-down scenario-up scenarios-up scenarios-down fixtures test lint eval
 
 # One command for a reviewer: cluster, RBAC, all scenarios, config file and the agent image.
 up: cluster-up scenarios-up .env
 	docker compose build agent
 	@echo
 	@echo "Ready. Faults take ~60s to show up (restarts, probe failures, events). Then:"
-	@echo '  docker compose run --rm agent investigate "Why is checkout unhealthy?" -n scenario-01 --backend live'
+	@echo '  make run                       # investigate scenario 01'
+	@echo '  make run S=03 Q="Requests to frontend time out. Why?"'
 	@echo "Offline, no API key: docker compose run --rm agent eval --llm scripted"
 	@echo "For a real model, set GEMINI_API_KEY or ANTHROPIC_API_KEY and AGENT_LLM_PROVIDER in .env."
+
+# Investigate one scenario on the live cluster with the model configured in .env.
+run:
+	docker compose run --rm agent investigate "$(Q)" -n scenario-$(S) --backend live
 
 # Created once from the example; an existing .env is never overwritten.
 .env:

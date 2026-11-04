@@ -84,7 +84,8 @@ builds the agent image. The first run takes a few minutes (kind pulls its node i
 image builds); after that it takes seconds. For a real model,
 set `GEMINI_API_KEY` (free tier in Google AI Studio) or `ANTHROPIC_API_KEY` in `.env`, with the
 matching `AGENT_LLM_PROVIDER`. The steps are also separate targets: `make cluster-up`,
-`make scenarios-up` (or one with `make scenario-up S=01`) and `make cluster-down`.
+`make scenarios-up` (or one with `make scenario-up S=01`) and `make cluster-down`. Then run
+the agent with `make run` (see below).
 
 `make up` and `make cluster-up` are idempotent. The agent never uses your admin kubeconfig: it gets two
 ServiceAccount kubeconfigs in `.kube/` (mode 0600, gitignored). Their tokens last 24h; rerun
@@ -111,7 +112,13 @@ Without a key, the evals still run offline with the scripted test double (see
 In a container (only Docker needed):
 
 ```bash
-docker compose build agent
+make run                                                # scenario 01, a generic question
+make run S=03 Q="Requests to frontend time out. Why?"   # any scenario, your own question
+```
+
+`make run` is short for:
+
+```bash
 docker compose run --rm agent investigate "Why is the checkout service unhealthy?" \
   -n scenario-01 --backend live
 ```
