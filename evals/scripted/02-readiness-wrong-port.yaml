@@ -1,0 +1,19 @@
+turns:
+  - - {type: tool_use, name: list_pods, input: {namespace: scenario-02}}
+    - {type: tool_use, name: list_services, input: {namespace: scenario-02}}
+  - - {type: tool_use, name: get_events, input: {namespace: scenario-02}}
+    - {type: tool_use, name: get_deployment, input: {namespace: scenario-02, name: catalog}}
+  - - type: tool_use
+      name: submit_diagnosis
+      input:
+        fault_found: true
+        category: readiness_probe_failure
+        root_cause: The catalog readiness probe checks port 8080 /healthz, but nginx listens on port 80, so the probe is refused, the pods never become Ready and the Service has no ready endpoints.
+        affected_resources: [deployment/catalog, service/catalog]
+        evidence:
+          - {claim: Pods run but are not Ready., tool_call_id: t1, excerpt: '"phase": "Running", "ready": "0/1"'}
+          - {claim: The readiness probe is refused on 8080., tool_call_id: t3, excerpt: 'Readiness probe failed: Get'}
+          - {claim: The probe targets 8080 while the container port is 80., tool_call_id: t4, excerpt: '"port": 8080'}
+        recommended_action: Change the catalog readiness probe to port 80 and a path nginx serves (e.g. /), and roll out the deployment.
+        action_risk: low
+        confidence: 0.9

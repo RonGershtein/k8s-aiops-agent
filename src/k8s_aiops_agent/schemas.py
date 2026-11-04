@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -22,6 +22,13 @@ class Evidence(BaseModel):
     excerpt: str = Field(description="Short verbatim quote from that tool output.")
 
 
+class ServiceSelectorFix(BaseModel):
+    service: str = Field(description="Name of the Service whose selector is wrong.")
+    proposed_selector: dict[str, str] = Field(
+        description="Selector labels that match the intended, healthy pods."
+    )
+
+
 class Diagnosis(BaseModel):
     fault_found: bool
     category: FaultCategory
@@ -33,6 +40,13 @@ class Diagnosis(BaseModel):
     recommended_action: str
     action_risk: Literal["none", "low", "medium", "high"]
     confidence: float = Field(ge=0.0, le=1.0)
+    proposed_fix: ServiceSelectorFix | None = Field(
+        default=None,
+        description=(
+            "Only for a Service selector mismatch: the selector fix the operator may apply "
+            "after approval. Leave empty for every other fault."
+        ),
+    )
 
     @model_validator(mode="after")
     def _category_agrees_with_fault_found(self) -> "Diagnosis":
@@ -63,7 +77,14 @@ class RemediationOutcome(BaseModel):
 
 
 StopReason = Literal[
-    "diagnosis_submitted", "max_steps", "token_budget", "timeout", "repeated_calls"
+    "diagnosis_submitted",
+    "max_steps",
+    "token_budget",
+    "timeout",
+    "repeated_calls",
+    "invalid_diagnosis",
+    "model_refusal",
+    "model_error",
 ]
 
 
@@ -82,3 +103,6 @@ class InvestigationResult(BaseModel):
     diagnosis: Diagnosis
     stats: RunStats
     remediation: RemediationOutcome | None = None
+    ledger: list[dict[str, Any]] = Field(
+        default_factory=list, description="Every tool call: id, name, args, output, error, latency."
+    )

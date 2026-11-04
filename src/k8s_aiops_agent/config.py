@@ -1,5 +1,6 @@
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,11 +25,15 @@ class AgentSettings(BaseSettings):
     )
 
     llm_provider: LlmProvider = LlmProvider.SCRIPTED
-    model: str = "claude-sonnet-5"
+    model: str = "claude-opus-5-5"
+    judge_model: str = "claude-opus-5-5"
+    effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
+    max_output_tokens: int = Field(default=16_000, ge=1_000)
     anthropic_api_key: SecretStr | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
 
     backend: KubeBackend = KubeBackend.FIXTURE
     kubeconfig: Path | None = None
+    remediator_kubeconfig: Path | None = None
     # Deny by default: the agent reads nothing until namespaces are explicitly allowed.
     allowed_namespaces: list[str] = Field(default_factory=list)
     fixtures_dir: Path = Path("scenarios")
@@ -39,6 +44,11 @@ class AgentSettings(BaseSettings):
     max_tool_output_chars: int = Field(default=6_000, ge=500)
 
     trace_dir: Path = Path("traces")
+    langfuse_public_key: str | None = Field(default=None, validation_alias="LANGFUSE_PUBLIC_KEY")
+    langfuse_secret_key: SecretStr | None = Field(
+        default=None, validation_alias="LANGFUSE_SECRET_KEY"
+    )
+    langfuse_host: str = Field(default="http://localhost:3000", validation_alias="LANGFUSE_HOST")
 
     @model_validator(mode="after")
     def _anthropic_requires_api_key(self) -> "AgentSettings":

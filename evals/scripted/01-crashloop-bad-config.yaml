@@ -1,0 +1,20 @@
+turns:
+  - - {type: tool_use, name: list_pods, input: {namespace: scenario-01}}
+    - {type: tool_use, name: list_deployments, input: {namespace: scenario-01}}
+  - - {type: tool_use, name: get_pod_logs, input: {namespace: scenario-01, name: checkout-5787576987-r846n, previous: true}}
+    - {type: tool_use, name: get_deployment, input: {namespace: scenario-01, name: checkout}}
+  - - {type: tool_use, name: get_configmap, input: {namespace: scenario-01, name: checkout-config}}
+  - - type: tool_use
+      name: submit_diagnosis
+      input:
+        fault_found: true
+        category: bad_configuration
+        root_cause: ConfigMap checkout-config sets PAYMENT_TIMEOUT_MS to "30s", but checkout expects integer milliseconds, so the container exits at startup and the pod is in CrashLoopBackOff.
+        affected_resources: [deployment/checkout, configmap/checkout-config]
+        evidence:
+          - {claim: The checkout pod is crash looping., tool_call_id: t1, excerpt: CrashLoopBackOff}
+          - {claim: The container exits on a config parse error., tool_call_id: t3, excerpt: 'FATAL config: PAYMENT_TIMEOUT_MS="30s" is not a valid integer number of milliseconds'}
+          - {claim: The bad value comes from the ConfigMap., tool_call_id: t5, excerpt: '"PAYMENT_TIMEOUT_MS": "30s"'}
+        recommended_action: Set PAYMENT_TIMEOUT_MS in ConfigMap checkout-config to integer milliseconds (e.g. "30000"), then run `kubectl rollout restart deployment/checkout -n scenario-01`.
+        action_risk: low
+        confidence: 0.95
