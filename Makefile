@@ -1,7 +1,7 @@
 S ?= 01
 Q ?= What is wrong in this namespace?
 
-.PHONY: up run cluster-up cluster-down scenario-up scenarios-up scenarios-down fixtures test lint eval
+.PHONY: up run fix cluster-up cluster-down scenario-up scenarios-up scenarios-down fixtures test lint eval
 
 # One command for a reviewer: cluster, RBAC, all scenarios, config file and the agent image.
 up: cluster-up scenarios-up .env
@@ -10,12 +10,19 @@ up: cluster-up scenarios-up .env
 	@echo "Ready. Faults take ~60s to show up (restarts, probe failures, events). Then:"
 	@echo '  make run                       # investigate scenario 01'
 	@echo '  make run S=03 Q="Requests to frontend time out. Why?"'
+	@echo '  make fix                       # scenario 03: propose a fix, ask y/N, patch, verify'
 	@echo "Offline, no API key: docker compose run --rm agent eval --llm scripted"
 	@echo "For a real model, set GEMINI_API_KEY or ANTHROPIC_API_KEY and AGENT_LLM_PROVIDER in .env."
 
 # Investigate one scenario on the live cluster with the model configured in .env.
 run:
 	docker compose run --rm agent investigate "$(Q)" -n scenario-$(S) --backend live
+
+# The one supported remediation (scenario 03's Service selector), behind a y/N approval.
+# Reset afterwards with `make scenario-up S=03`.
+fix:
+	docker compose run --rm agent investigate "Requests to frontend time out. Why?" \
+		-n scenario-03 --backend live --allow-remediation
 
 # Created once from the example; an existing .env is never overwritten.
 .env:

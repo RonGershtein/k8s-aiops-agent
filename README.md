@@ -114,6 +114,7 @@ In a container (only Docker needed):
 ```bash
 make run                                                # scenario 01, a generic question
 make run S=03 Q="Requests to frontend time out. Why?"   # any scenario, your own question
+make fix                                                # scenario 03 with the approval-gated fix
 ```
 
 `make run` is short for:
@@ -255,14 +256,18 @@ works.
 ## Remediation with approval
 
 ```bash
-uv run aiops investigate "Requests to frontend time out. Why?" -n scenario-03 --backend live --allow-remediation
+make fix                 # answer y at "Apply this change? [y/N]"
+make scenario-up S=03    # break it again afterwards
 ```
 
-When the diagnosis is a Service selector mismatch and carries a proposed selector, the graph:
+`make fix` runs the agent on scenario 03 with `--allow-remediation` (the full command is in the
+`Makefile`). When the diagnosis is a Service selector mismatch, the graph:
 
 1. **Proposes:** re-reads the Service and pods, and refuses to propose unless the new selector
    matches at least one Ready pod and differs from the current one. It then shows the current
-   selector, the proposed selector, the pods it will route to, and the expected effect.
+   selector, the proposed selector, the pods it will route to, and the expected effect. If the
+   diagnosis leaves out the corrected selector, the model is asked for it once; if it is still
+   missing, the run says "No fix proposed" and why, instead of ending silently.
 2. **Pauses for approval:** LangGraph `interrupt()`. Nothing changes unless a human types `y`, and
    the default is no.
 3. **Applies through one narrow tool:** a JSON patch that first `test`s that `spec.selector` is
