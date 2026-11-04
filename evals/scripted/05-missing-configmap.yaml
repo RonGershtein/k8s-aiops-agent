@@ -1,0 +1,17 @@
+turns:
+  - - {type: tool_use, name: list_pods, input: {namespace: scenario-05}}
+    - {type: tool_use, name: get_events, input: {namespace: scenario-05}}
+  - - {type: tool_use, name: get_configmap, input: {namespace: scenario-05, name: orders-config}}
+  - - type: tool_use
+      name: submit_diagnosis
+      input:
+        fault_found: true
+        category: bad_configuration
+        root_cause: The orders container loads its environment from ConfigMap orders-config, which does not exist, so the container cannot be created (CreateContainerConfigError).
+        affected_resources: [deployment/orders]
+        evidence:
+          - {claim: The container cannot be created., tool_call_id: t1, excerpt: CreateContainerConfigError}
+          - {claim: The referenced ConfigMap is missing., tool_call_id: t3, excerpt: configmaps "orders-config" not found}
+        recommended_action: Create ConfigMap orders-config in scenario-05 with the keys orders needs (or fix the reference in the deployment).
+        action_risk: low
+        confidence: 0.9

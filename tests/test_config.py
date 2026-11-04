@@ -4,18 +4,8 @@ from pydantic import ValidationError
 from k8s_aiops_agent.config import AgentSettings, KubeBackend, LlmProvider
 
 
-@pytest.fixture(autouse=True)
-def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in (
-        "AGENT_LLM_PROVIDER",
-        "AGENT_BACKEND",
-        "AGENT_ALLOWED_NAMESPACES",
-        "ANTHROPIC_API_KEY",
-    ):
-        monkeypatch.delenv(name, raising=False)
-
-
 def load_settings() -> AgentSettings:
+    """The real defaults: no .env file, and conftest strips AGENT_* from the environment."""
     return AgentSettings(_env_file=None)
 
 
@@ -24,6 +14,12 @@ def test_settings_without_env_defaults_to_offline_scripted_fixture_mode() -> Non
 
     assert settings.llm_provider is LlmProvider.SCRIPTED
     assert settings.backend is KubeBackend.FIXTURE
+
+
+def test_settings_without_allowed_namespaces_denies_all() -> None:
+    settings = load_settings()
+
+    assert settings.allowed_namespaces == []
 
 
 def test_settings_reads_allowed_namespaces_from_json_env(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,0 +1,13 @@
+id: 04-image-pull-error
+namespace: scenario-04
+held_out: true
+question: The inventory service never came up after the last deploy. Can you check?
+expected:
+  fault_found: true
+  categories: [image_pull_error]
+  affected_resources: [deployment/inventory]
+  key_signals: [1.27-alpne]
+  required_tools: []
+reference_answer: >
+  The inventory pod is stuck in ImagePullBackOff because the image tag nginx:1.27-alpne does not exist
+  (typo of 1.27-alpine); events show the pull failing with "not found". Fix the image tag in the deployment.

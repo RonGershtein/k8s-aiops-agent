@@ -4,13 +4,26 @@ version = "0.1.0"
 description = "An AI agent that investigates a Kubernetes cluster, finds the root cause, and recommends a safe next action."
 readme = "README.md"
 authors = [
-    { name = "RonGershtein", email = "talmor3003@gmail.com" }
+    { name = "Ron Gershtein", email = "talmor3003@gmail.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "anthropic>=2.4.0",
+    "httpx>=0.28.1",
+    "kubernetes>=37.0.1",
+    "langgraph>=1.2.19",
+    "mcp>=2.3.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.45.2",
+    "opentelemetry-sdk>=1.45.2",
     "pydantic>=2.14.2",
     "pydantic-settings>=2.16.2",
+    "pyyaml>=6.0.3",
+    "rich>=15.0.0",
+    "typer>=0.27.3",
 ]
+
+[project.scripts]
+aiops = "k8s_aiops_agent.cli:app"
 
 [build-system]
 requires = ["uv_build>=0.13.0,<0.14.0"]
@@ -21,6 +34,7 @@ dev = [
     "mypy>=2.4.1",
     "pytest>=9.2.0",
     "ruff>=0.17.3",
+    "types-pyyaml>=6.0.12.20261103",
 ]
 
 [tool.ruff]
@@ -38,6 +52,11 @@ plugins = ["pydantic.mypy"]
 [[tool.mypy.overrides]]
 module = ["kubernetes.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# The kubernetes client is untyped; only kube.py and remediation.py call it.
+module = ["k8s_aiops_agent.kube", "k8s_aiops_agent.remediation"]
+disallow_untyped_calls = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

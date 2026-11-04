@@ -1,0 +1,292 @@
+{
+  "configmaps": {},
+  "deployment_details": {
+    "inventory": {
+      "available_replicas": 0,
+      "conditions": [
+        {
+          "lastTransitionTime": "2026-11-04T16:40:38+00:00",
+          "lastUpdateTime": "2026-11-04T16:40:38+00:00",
+          "message": "Deployment does not have minimum availability.",
+          "reason": "MinimumReplicasUnavailable",
+          "status": "False",
+          "type": "Available"
+        },
+        {
+          "lastTransitionTime": "2026-11-04T16:40:38+00:00",
+          "lastUpdateTime": "2026-11-04T16:40:38+00:00",
+          "message": "ReplicaSet \"inventory-7b4b59574f\" is progressing.",
+          "reason": "ReplicaSetUpdated",
+          "status": "True",
+          "type": "Progressing"
+        }
+      ],
+      "containers": [
+        {
+          "image": "nginx:1.27-alpne",
+          "name": "inventory",
+          "ports": [
+            {
+              "containerPort": 80,
+              "protocol": "TCP"
+            }
+          ],
+          "resources": {
+            "limits": {
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "16Mi"
+            }
+          }
+        }
+      ],
+      "name": "inventory",
+      "ready_replicas": 0,
+      "replicas": 1,
+      "selector": {
+        "app": "inventory"
+      },
+      "template_labels": {
+        "app": "inventory"
+      }
+    }
+  },
+  "deployments": [
+    {
+      "images": [
+        "nginx:1.27-alpne"
+      ],
+      "name": "inventory",
+      "ready_replicas": 0,
+      "replicas": 1
+    }
+  ],
+  "events": [
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:40:38+00:00",
+      "message": "Successfully assigned scenario-04/inventory-7b4b59574f-sq9xn to aiops-control-plane",
+      "object": "pod/inventory-7b4b59574f-sq9xn",
+      "reason": "Scheduled",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:40:38+00:00",
+      "message": "Created pod: inventory-7b4b59574f-sq9xn",
+      "object": "replicaset/inventory-7b4b59574f",
+      "reason": "SuccessfulCreate",
+      "type": "Normal"
+    },
+    {
+      "count": 1,
+      "last_seen": "2026-11-04T16:40:38+00:00",
+      "message": "Scaled up replica set inventory-7b4b59574f from 0 to 1",
+      "object": "deployment/inventory",
+      "reason": "ScalingReplicaSet",
+      "type": "Normal"
+    },
+    {
+      "count": 5,
+      "last_seen": "2026-11-04T16:41:57+00:00",
+      "message": "Back-off pulling image \"nginx:1.27-alpne\"",
+      "object": "pod/inventory-7b4b59574f-sq9xn",
+      "reason": "BackOff",
+      "type": "Normal"
+    },
+    {
+      "count": 5,
+      "last_seen": "2026-11-04T16:41:57+00:00",
+      "message": "Error: ImagePullBackOff",
+      "object": "pod/inventory-7b4b59574f-sq9xn",
+      "reason": "Failed",
+      "type": "Warning"
+    },
+    {
+      "count": 4,
+      "last_seen": "2026-11-04T16:42:08+00:00",
+      "message": "Pulling image \"nginx:1.27-alpne\"",
+      "object": "pod/inventory-7b4b59574f-sq9xn",
+      "reason": "Pulling",
+      "type": "Normal"
+    },
+    {
+      "count": 4,
+      "last_seen": "2026-11-04T16:42:09+00:00",
+      "message": "Failed to pull image \"nginx:1.27-alpne\": rpc error: code = NotFound desc = failed to pull and unpack image \"docker.io/library/nginx:1.27-alpne\": failed to resolve reference \"docker.io/library/nginx:1.27-alpne\": docker.io/library/nginx:1.27-alpne: not found",
+      "object": "pod/inventory-7b4b59574f-sq9xn",
+      "reason": "Failed",
+      "type": "Warning"
+    },
+    {
+      "count": 4,
+      "last_seen": "2026-11-04T16:42:09+00:00",
+      "message": "Error: ErrImagePull",
+      "object": "pod/inventory-7b4b59574f-sq9xn",
+      "reason": "Failed",
+      "type": "Warning"
+    }
+  ],
+  "logs": {
+    "inventory-7b4b59574f-sq9xn": {
+      "current": {
+        "__error__": {
+          "message": "container \"inventory\" in pod \"inventory-7b4b59574f-sq9xn\" is waiting to start: trying and failing to pull image",
+          "status": 400
+        }
+      },
+      "previous": {
+        "__error__": {
+          "message": "container \"inventory\" in pod \"inventory-7b4b59574f-sq9xn\" is waiting to start: trying and failing to pull image",
+          "status": 400
+        }
+      }
+    }
+  },
+  "namespace": "scenario-04",
+  "pod_details": {
+    "inventory-7b4b59574f-sq9xn": {
+      "conditions": [
+        {
+          "lastTransitionTime": "2026-11-04T16:40:39+00:00",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastTransitionTime": "2026-11-04T16:40:38+00:00",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastTransitionTime": "2026-11-04T16:40:38+00:00",
+          "message": "containers with unready status: [inventory]",
+          "observedGeneration": 1,
+          "reason": "ContainersNotReady",
+          "status": "False",
+          "type": "Ready"
+        },
+        {
+          "lastTransitionTime": "2026-11-04T16:40:38+00:00",
+          "message": "containers with unready status: [inventory]",
+          "observedGeneration": 1,
+          "reason": "ContainersNotReady",
+          "status": "False",
+          "type": "ContainersReady"
+        },
+        {
+          "lastTransitionTime": "2026-11-04T16:40:38+00:00",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "container_statuses": [
+        {
+          "image": "nginx:1.27-alpne",
+          "imageID": "",
+          "lastState": {},
+          "name": "inventory",
+          "ready": false,
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "waiting": {
+              "message": "Back-off pulling image \"nginx:1.27-alpne\": ErrImagePull: rpc error: code = NotFound desc = failed to pull and unpack image \"docker.io/library/nginx:1.27-alpne\": failed to resolve reference \"docker.io/library/nginx:1.27-alpne\": docker.io/library/nginx:1.27-alpne: not found",
+              "reason": "ImagePullBackOff"
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-lthxv",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "containers": [
+        {
+          "image": "nginx:1.27-alpne",
+          "name": "inventory",
+          "ports": [
+            {
+              "containerPort": 80,
+              "protocol": "TCP"
+            }
+          ],
+          "resources": {
+            "limits": {
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "16Mi"
+            }
+          }
+        }
+      ],
+      "labels": {
+        "app": "inventory",
+        "pod-template-hash": "7b4b59574f"
+      },
+      "name": "inventory-7b4b59574f-sq9xn",
+      "node": "aiops-control-plane",
+      "phase": "Pending",
+      "ready": "0/1",
+      "restarts": 0,
+      "waiting_reasons": [
+        "ImagePullBackOff"
+      ]
+    }
+  },
+  "pods": [
+    {
+      "labels": {
+        "app": "inventory",
+        "pod-template-hash": "7b4b59574f"
+      },
+      "name": "inventory-7b4b59574f-sq9xn",
+      "node": "aiops-control-plane",
+      "phase": "Pending",
+      "ready": "0/1",
+      "restarts": 0,
+      "waiting_reasons": [
+        "ImagePullBackOff"
+      ]
+    }
+  ],
+  "service_details": {
+    "inventory": {
+      "name": "inventory",
+      "not_ready_endpoints": [
+        "inventory-7b4b59574f-sq9xn"
+      ],
+      "ports": [
+        {
+          "port": 80,
+          "protocol": "TCP",
+          "targetPort": 80
+        }
+      ],
+      "ready_endpoints": [],
+      "selector": {
+        "app": "inventory"
+      },
+      "type": "ClusterIP"
+    }
+  },
+  "services": [
+    {
+      "name": "inventory",
+      "selector": {
+        "app": "inventory"
+      },
+      "type": "ClusterIP"
+    }
+  ]
+}

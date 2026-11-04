@@ -1,0 +1,12 @@
+id: 00-healthy
+namespace: scenario-00
+question: Is the web service healthy? Users say it is slow.
+expected:
+  fault_found: false
+  categories: [no_fault]
+  affected_resources: []
+  key_signals: [Running]
+  required_tools: [list_pods]
+reference_answer: >
+  No fault found. Both web pods are Running and Ready, and the web Service has two ready endpoints.
+  The right action is to change nothing and look at application metrics or latency if slowness persists.

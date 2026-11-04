@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -14,12 +14,24 @@ class FaultCategory(StrEnum):
     RESOURCE_EXHAUSTION = "resource_exhaustion"
     SCHEDULING_FAILURE = "scheduling_failure"
     OTHER = "other"
+    # Special case: the investigation could not support any conclusion.
+    INCONCLUSIVE = "inconclusive"
+
+
+_NO_FAULT_CLAIMED = {FaultCategory.NO_FAULT, FaultCategory.INCONCLUSIVE}
 
 
 class Evidence(BaseModel):
     claim: str = Field(description="What this finding shows, in one sentence.")
     tool_call_id: str = Field(description="Id of the tool call whose output supports the claim.")
     excerpt: str = Field(description="Short verbatim quote from that tool output.")
+
+
+class ServiceSelectorFix(BaseModel):
+    service: str = Field(description="Name of the Service whose selector is wrong.")
+    proposed_selector: dict[str, str] = Field(
+        description="Selector labels that match the intended, healthy pods."
+    )
 
 
 class Diagnosis(BaseModel):
@@ -29,15 +41,28 @@ class Diagnosis(BaseModel):
         description="What is wrong, or an explicit statement that no fault was found."
     )
     affected_resources: list[str] = Field(default_factory=list, description="e.g. 'deployment/web'")
-    evidence: list[Evidence] = Field(min_length=1)
+    evidence: list[Evidence] = Field(
+        default_factory=list, description="At least one item, unless the result is inconclusive."
+    )
     recommended_action: str
     action_risk: Literal["none", "low", "medium", "high"]
     confidence: float = Field(ge=0.0, le=1.0)
+    proposed_fix: ServiceSelectorFix | None = Field(
+        default=None,
+        description=(
+            "Only for a Service selector mismatch: the selector fix the operator may apply "
+            "after approval. Leave empty for every other fault."
+        ),
+    )
 
     @model_validator(mode="after")
     def _category_agrees_with_fault_found(self) -> "Diagnosis":
-        if self.fault_found == (self.category is FaultCategory.NO_FAULT):
-            raise ValueError("category must be 'no_fault' exactly when fault_found is false")
+        if self.fault_found == (self.category in _NO_FAULT_CLAIMED):
+            raise ValueError(
+                "fault_found must be false exactly when category is 'no_fault' or 'inconclusive'"
+            )
+        if not self.evidence and self.category is not FaultCategory.INCONCLUSIVE:
+            raise ValueError("evidence needs at least one item unless the result is inconclusive")
         return self
 
     def cited_tool_call_ids(self) -> set[str]:
@@ -63,7 +88,14 @@ class RemediationOutcome(BaseModel):
 
 
 StopReason = Literal[
-    "diagnosis_submitted", "max_steps", "token_budget", "timeout", "repeated_calls"
+    "diagnosis_submitted",
+    "max_steps",
+    "token_budget",
+    "timeout",
+    "repeated_calls",
+    "invalid_diagnosis",
+    "model_refusal",
+    "model_error",
 ]
 
 
@@ -82,3 +114,6 @@ class InvestigationResult(BaseModel):
     diagnosis: Diagnosis
     stats: RunStats
     remediation: RemediationOutcome | None = None
+    ledger: list[dict[str, Any]] = Field(
+        default_factory=list, description="Every tool call: id, name, args, output, error, latency."
+    )

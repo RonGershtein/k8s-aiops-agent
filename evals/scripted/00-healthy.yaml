@@ -1,0 +1,18 @@
+turns:
+  - - {type: tool_use, name: list_pods, input: {namespace: scenario-00}}
+    - {type: tool_use, name: list_services, input: {namespace: scenario-00}}
+  - - {type: tool_use, name: get_service_and_endpoints, input: {namespace: scenario-00, name: web}}
+    - {type: tool_use, name: get_events, input: {namespace: scenario-00}}
+  - - type: tool_use
+      name: submit_diagnosis
+      input:
+        fault_found: false
+        category: no_fault
+        root_cause: No fault found. Both web pods are Running and Ready with no restarts, and the web Service has ready endpoints.
+        affected_resources: []
+        evidence:
+          - {claim: Both pods are Running and 1/1 Ready with zero restarts., tool_call_id: t1, excerpt: '"phase": "Running", "ready": "1/1", "restarts": 0'}
+          - {claim: The Service routes to both pods., tool_call_id: t3, excerpt: '"ready_endpoints": ["web-76b7db9bd5-mb6jz", "web-76b7db9bd5-dmkq9"]'}
+        recommended_action: No change needed. If users still report slowness, look at application latency metrics and upstream dependencies.
+        action_risk: none
+        confidence: 0.85

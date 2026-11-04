@@ -14,4 +14,3 @@ build/
 .kube/
 
 traces/
-eval-results/*.jsonl

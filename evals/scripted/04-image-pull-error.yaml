@@ -1,0 +1,16 @@
+turns:
+  - - {type: tool_use, name: list_pods, input: {namespace: scenario-04}}
+    - {type: tool_use, name: get_events, input: {namespace: scenario-04}}
+  - - type: tool_use
+      name: submit_diagnosis
+      input:
+        fault_found: true
+        category: image_pull_error
+        root_cause: The inventory pod cannot pull image nginx:1.27-alpne because that tag does not exist (likely a typo of 1.27-alpine).
+        affected_resources: [deployment/inventory]
+        evidence:
+          - {claim: The pod is stuck pulling its image., tool_call_id: t1, excerpt: ImagePullBackOff}
+          - {claim: The image tag is not found., tool_call_id: t2, excerpt: nginx:1.27-alpne}
+        recommended_action: Fix the image tag in deployment/inventory to an existing tag (e.g. nginx:1.27-alpine) and roll out.
+        action_risk: low
+        confidence: 0.9

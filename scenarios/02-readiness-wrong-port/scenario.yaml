@@ -1,0 +1,13 @@
+id: 02-readiness-wrong-port
+namespace: scenario-02
+question: The catalog service returns no data. What is wrong?
+expected:
+  fault_found: true
+  categories: [readiness_probe_failure]
+  affected_resources: [deployment/catalog]
+  key_signals: ["8080"]
+  required_tools: [get_events]
+reference_answer: >
+  The catalog pods are Running but 0/1 Ready because the readiness probe checks port 8080 /healthz while
+  nginx listens on port 80; events show "Readiness probe failed ... connection refused". The Service has no
+  ready endpoints. Fix the probe in the deployment to port 80 and a path that exists (e.g. /).

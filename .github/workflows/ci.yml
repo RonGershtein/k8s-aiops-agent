@@ -1,0 +1,116 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      real_llm_eval:
+        description: "Also run the evals against Claude (needs the ANTHROPIC_API_KEY secret)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  AGENT_ALLOWED_NAMESPACES: '["scenario-00","scenario-01","scenario-02","scenario-03","scenario-04","scenario-05"]'
+
+jobs:
+  checks:
+    name: lint, types, tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: {enable-cache: true}
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy src
+      # Live tests skip themselves without a cluster; the kind job below runs them.
+      - run: uv run pytest
+
+  offline-eval:
+    name: eval gate (fixtures + scripted model)
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: {enable-cache: true}
+      - run: uv sync --frozen
+      - run: uv run aiops eval --llm scripted --backend fixture --min-pass-rate 1.0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: eval-offline, path: evals/results/}
+
+  image:
+    name: container build
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t k8s-aiops-agent:ci .
+      - name: Eval inside the image
+        run: >
+          docker run --rm -e AGENT_ALLOWED_NAMESPACES
+          k8s-aiops-agent:ci eval --llm scripted --backend fixture --min-pass-rate 1.0
+
+  kind-e2e:
+    name: kind end-to-end (live tools, RBAC, remediation)
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: {enable-cache: true}
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: aiops
+          config: deploy/kind-config.yaml
+      - run: uv sync --frozen
+      - run: make cluster-up
+      - name: Start all scenarios
+        run: for s in 00 01 02 03 04 05; do make scenario-up S=$s; done
+      - name: Let failures develop (restarts, probe failures, events)
+        run: |
+          kubectl --context kind-aiops -n scenario-03 rollout status deploy/frontend --timeout=180s
+          sleep 60
+          kubectl --context kind-aiops get pods -A -l 'app in (web,checkout,catalog,frontend,inventory,orders)'
+      - run: uv run pytest -m live
+      - name: Live investigation with approved remediation (scripted model)
+        env:
+          AGENT_KUBECONFIG: .kube/agent-readonly.kubeconfig
+          AGENT_REMEDIATOR_KUBECONFIG: .kube/agent-remediator.kubeconfig
+        run: |
+          echo y | uv run aiops investigate "Requests to frontend time out" -n scenario-03 \
+            --backend live --llm scripted --allow-remediation --json \
+            --script evals/scripted/03-service-selector-mismatch.yaml > result.json
+          python3 -c "import json; r=json.load(open('result.json'))['remediation']; print(r); assert r['resolved']"
+
+  real-llm-eval:
+    name: eval with Claude (manual)
+    if: github.event_name == 'workflow_dispatch' && inputs.real_llm_eval
+    needs: offline-eval
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: {enable-cache: true}
+      - run: uv sync --frozen
+      - name: Skip without the secret
+        if: env.ANTHROPIC_API_KEY == ''
+        run: echo "::warning::ANTHROPIC_API_KEY secret is not set; skipping" && exit 0
+      - if: env.ANTHROPIC_API_KEY != ''
+        run: uv run aiops eval --llm anthropic --backend fixture --trials 3 --judge
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: eval-claude, path: evals/results/}

@@ -1,0 +1,33 @@
+# Control scenario: everything is healthy; the agent must say so instead of inventing a fault.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: scenario-00
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: web}
+  template:
+    metadata:
+      labels: {app: web}
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports: [{containerPort: 80}]
+          readinessProbe:
+            httpGet: {path: /, port: 80}
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: scenario-00
+spec:
+  selector: {app: web}
+  ports: [{port: 80, targetPort: 80}]

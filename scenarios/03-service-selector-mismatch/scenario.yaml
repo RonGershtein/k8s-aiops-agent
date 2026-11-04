@@ -1,0 +1,17 @@
+id: 03-service-selector-mismatch
+namespace: scenario-03
+question: Requests to the frontend service time out. Why?
+expected:
+  fault_found: true
+  categories: [service_selector_mismatch]
+  affected_resources: [service/frontend]
+  key_signals: [frontend-v2]
+  required_tools: [get_service_and_endpoints, list_pods]
+remediation:
+  action: patch_service_selector
+  service: frontend
+  proposed_selector: {app: frontend}
+reference_answer: >
+  The frontend Service selects app=frontend-v2 but the healthy, Ready pods are labeled app=frontend,
+  so the Service has no endpoints. Patch the Service selector to app=frontend; endpoints should then list
+  both pods. Do not relabel or restart the pods.

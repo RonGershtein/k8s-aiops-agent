@@ -1,0 +1,19 @@
+turns:
+  - - {type: tool_use, name: list_services, input: {namespace: scenario-03}}
+    - {type: tool_use, name: list_pods, input: {namespace: scenario-03}}
+  - - {type: tool_use, name: get_service_and_endpoints, input: {namespace: scenario-03, name: frontend}}
+  - - type: tool_use
+      name: submit_diagnosis
+      input:
+        fault_found: true
+        category: service_selector_mismatch
+        root_cause: The frontend Service selects app=frontend-v2, but the healthy, Ready pods are labeled app=frontend, so the Service has no endpoints.
+        affected_resources: [service/frontend]
+        evidence:
+          - {claim: The Service selector asks for app=frontend-v2., tool_call_id: t3, excerpt: '"selector": {"app": "frontend-v2"}'}
+          - {claim: The Service has no ready endpoints., tool_call_id: t3, excerpt: '"ready_endpoints": []'}
+          - {claim: The pods are Ready and labeled app=frontend., tool_call_id: t2, excerpt: '"app": "frontend"'}
+        recommended_action: Patch the frontend Service selector to app=frontend. Do not relabel or restart the pods.
+        action_risk: low
+        confidence: 0.95
+        proposed_fix: {service: frontend, proposed_selector: {app: frontend}}
