@@ -38,7 +38,8 @@ Investigation steps and tokens are budgeted, so do not keep exploring after you 
 FINALIZE_PROMPT = """\
 The investigation budget is used up ({reason}). Do not call any more investigation tools. Call \
 submit_diagnosis now, using only evidence_ids you have already received. If the evidence is not \
-conclusive, say so in root_cause and lower your confidence.
+conclusive, use category "inconclusive" with fault_found false, say what is missing in root_cause, \
+and lower your confidence.
 """
 
 NO_TOOL_CALL_PROMPT = (

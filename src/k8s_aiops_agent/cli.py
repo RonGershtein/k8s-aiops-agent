@@ -24,7 +24,7 @@ from k8s_aiops_agent.kube import KubeGateway, LiveKube
 from k8s_aiops_agent.llm import build_model
 from k8s_aiops_agent.mcp_server import build_mcp_server
 from k8s_aiops_agent.remediation import LiveSelectorPatcher
-from k8s_aiops_agent.schemas import InvestigationResult, RemediationProposal
+from k8s_aiops_agent.schemas import FaultCategory, InvestigationResult, RemediationProposal
 from k8s_aiops_agent.telemetry import setup_tracing, shutdown_tracing
 
 SCRIPTED_DIR = Path("evals/scripted")
@@ -198,7 +198,9 @@ def _render(result: InvestigationResult, trace_dir: Path) -> None:
     evidence = "\n".join(
         escape(f"  [{e.tool_call_id}] {e.claim}\n      “{e.excerpt}”") for e in d.evidence
     )
-    color = "green" if not d.fault_found else "red"
+    color = {FaultCategory.NO_FAULT: "green", FaultCategory.INCONCLUSIVE: "yellow"}.get(
+        d.category, "red"
+    )
     console.print(
         Panel(
             f"[bold]{d.category.value}[/] (confidence {d.confidence:.0%})\n\n"

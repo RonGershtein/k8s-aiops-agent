@@ -412,18 +412,20 @@ def check_diagnosis(
 
 
 def fallback_diagnosis(reason: str, ledger: list[dict[str, Any]]) -> Diagnosis:
-    last = ledger[-1] if ledger else None
-    evidence = Evidence(
-        claim="Last observation before the investigation stopped.",
-        tool_call_id=last["id"] if last else "none",
-        excerpt=((last["error"] or last["output"])[:200] if last else ""),
-    )
+    evidence = [
+        Evidence(
+            claim="Last observation before the investigation stopped.",
+            tool_call_id=last["id"],
+            excerpt=(last["error"] or last["output"])[:200],
+        )
+        for last in ledger[-1:]
+    ]
     return Diagnosis(
-        fault_found=True,
-        category=FaultCategory.OTHER,
+        fault_found=False,
+        category=FaultCategory.INCONCLUSIVE,
         root_cause=f"Inconclusive: the investigation stopped ({reason}) before a supported "
         "conclusion was reached.",
-        evidence=[evidence],
+        evidence=evidence,
         recommended_action="Escalate to an operator and inspect the affected namespace manually.",
         action_risk="none",
         confidence=0.0,

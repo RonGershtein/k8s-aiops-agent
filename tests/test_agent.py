@@ -67,7 +67,7 @@ def test_investigate_model_that_never_submits_stops_at_max_steps_inconclusive(
 
     assert result.stats.stop_reason == "max_steps"
     assert result.stats.steps == 4  # the budget plus one finalize turn
-    assert result.diagnosis.category is FaultCategory.OTHER
+    assert result.diagnosis.category is FaultCategory.INCONCLUSIVE
     assert result.diagnosis.confidence == 0.0
 
 
@@ -119,7 +119,7 @@ def test_investigate_repeatedly_ungrounded_diagnosis_falls_back(kube: FixtureKub
     result = investigate("q", "scenario-01", settings(), kube, ScriptedModel(turns))
 
     assert result.stats.stop_reason == "invalid_diagnosis"
-    assert result.diagnosis.category is FaultCategory.OTHER
+    assert result.diagnosis.category is FaultCategory.INCONCLUSIVE
 
 
 def test_investigate_model_error_returns_inconclusive_instead_of_crashing(
@@ -279,3 +279,11 @@ def test_remediation_selector_matching_no_ready_pods_is_never_proposed() -> None
     assert cluster.patches == []
     assert result.remediation is not None
     assert "matches no Ready pods" in result.remediation.message
+
+
+def test_fallback_diagnosis_without_any_evidence_is_inconclusive_and_cites_nothing() -> None:
+    diagnosis = agent_module.fallback_diagnosis("model_error", [])
+
+    assert diagnosis.category is FaultCategory.INCONCLUSIVE
+    assert not diagnosis.fault_found
+    assert diagnosis.evidence == []
