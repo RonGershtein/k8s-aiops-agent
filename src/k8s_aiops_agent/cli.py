@@ -22,6 +22,7 @@ from k8s_aiops_agent.evals import (
 from k8s_aiops_agent.fixture_kube import FixtureKube
 from k8s_aiops_agent.kube import KubeGateway, LiveKube
 from k8s_aiops_agent.llm import build_model
+from k8s_aiops_agent.mcp_server import build_mcp_server
 from k8s_aiops_agent.remediation import LiveSelectorPatcher
 from k8s_aiops_agent.schemas import InvestigationResult, RemediationProposal
 from k8s_aiops_agent.telemetry import setup_tracing, shutdown_tracing
@@ -113,6 +114,18 @@ def eval_command(
     console.print(f"pass rate {rate:.0%} -> {out_dir / f'{mode}.md'}")
     if rate < min_pass_rate:
         raise typer.Exit(code=1)
+
+
+@app.command("mcp")
+def mcp_command(
+    backend: Annotated[KubeBackend | None, typer.Option(help="Overrides AGENT_BACKEND.")] = None,
+) -> None:
+    """Serve the read-only investigation tools over MCP (stdio)."""
+    settings = _load_settings(backend, None)
+    server = build_mcp_server(
+        _build_kube(settings), settings.allowed_namespaces, settings.max_tool_output_chars
+    )
+    server.run("stdio")
 
 
 @app.command("trace")
