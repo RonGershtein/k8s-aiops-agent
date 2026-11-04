@@ -213,13 +213,17 @@ class FakeCluster:
         self.selector = selector
 
 
-def selector_fix_turns() -> list[list[dict[str, Any]]]:
+READ_SERVICE = tool_call("get_service_and_endpoints", namespace="scenario-03", name="frontend")
+SELECTOR_FIX = {"service": "frontend", "proposed_selector": {"app": "frontend"}}
+
+
+def selector_submit(proposed_fix: dict[str, Any] | None) -> dict[str, Any]:
     evidence = [{"claim": "no endpoints", "tool_call_id": "t1", "excerpt": "frontend-v2"}]
-    fix = {"service": "frontend", "proposed_selector": {"app": "frontend"}}
-    return [
-        [tool_call("get_service_and_endpoints", namespace="scenario-03", name="frontend")],
-        [submit(evidence, category="service_selector_mismatch", proposed_fix=fix)],
-    ]
+    return submit(evidence, category="service_selector_mismatch", proposed_fix=proposed_fix)
+
+
+def selector_fix_turns() -> list[list[dict[str, Any]]]:
+    return [[READ_SERVICE], [selector_submit(SELECTOR_FIX)]]
 
 
 @pytest.fixture
@@ -353,3 +357,41 @@ def test_real_gemini_diagnoses_crashloop_correctly(
     trial = trial_result(scenario, 1, run, real_gemini_settings, judge=None)
 
     assert trial.checks == dict.fromkeys(trial.checks, True)
+
+
+@pytest.mark.usefixtures("no_verify_wait")
+def test_remediation_asks_once_for_a_missing_selector() -> None:
+    cluster = FakeCluster()
+    turns = [[READ_SERVICE], [selector_submit(None)], [selector_submit(SELECTOR_FIX)]]
+
+    result = investigate(
+        "q",
+        "scenario-03",
+        make_settings(),
+        cluster,
+        ScriptedModel(turns),  # type: ignore[arg-type]
+        Remediation(patcher=cluster, approve=lambda proposal: True),
+    )
+
+    assert cluster.patches == [{"app": "frontend"}]
+    assert result.remediation is not None
+    assert result.remediation.resolved
+
+
+def test_remediation_without_selector_says_why() -> None:
+    cluster = FakeCluster()
+    turns = [[READ_SERVICE], [selector_submit(None)], [selector_submit(None)]]
+
+    result = investigate(
+        "q",
+        "scenario-03",
+        make_settings(),
+        cluster,
+        ScriptedModel(turns),  # type: ignore[arg-type]
+        Remediation(patcher=cluster, approve=lambda proposal: True),
+    )
+
+    assert cluster.patches == []
+    assert result.diagnosis.category is FaultCategory.SERVICE_SELECTOR_MISMATCH
+    assert result.remediation is not None
+    assert "did not include the corrected selector" in result.remediation.message

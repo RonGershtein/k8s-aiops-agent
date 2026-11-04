@@ -46,6 +46,10 @@ VERIFY_ATTEMPTS = 10
 VERIFY_INTERVAL_SECONDS = 3.0
 # Evidence the agent writes itself (verification, fallback) quotes this much tool output.
 EXCERPT_CHARS = 300
+MISSING_SELECTOR_FIX = (
+    "proposed_fix: a Service selector mismatch needs the corrected selector, so the operator "
+    "can approve the fix"
+)
 
 
 class AgentState(TypedDict, total=False):
@@ -168,6 +172,10 @@ class _InvestigationNodes:
         submit = next(t for t in calls if t["name"] == SUBMIT_DIAGNOSIS)
         with observe("validate_diagnosis", "evaluator", input_value=submit["input"]) as span:
             diagnosis, problems = check_diagnosis(submit["input"], state.get("ledger", []))
+            if diagnosis is not None and self._selector_fix_missing_but_repairable(
+                diagnosis, state
+            ):
+                diagnosis, problems = None, [MISSING_SELECTOR_FIX]
             set_output(span, problems or "valid")
         if diagnosis is not None:
             return {
@@ -188,6 +196,16 @@ class _InvestigationNodes:
             "repairs": state.get("repairs", 0) + 1,
         }
 
+    def _selector_fix_missing_but_repairable(self, diagnosis: Diagnosis, state: AgentState) -> bool:
+        """Ask once for the corrected selector; never trade a valid diagnosis for it."""
+        return (
+            self._can_remediate
+            and diagnosis.category is FaultCategory.SERVICE_SELECTOR_MISMATCH
+            and diagnosis.proposed_fix is None
+            and not state.get("finalizing")
+            and state.get("repairs", 0) < MAX_REPAIRS
+        )
+
     def route_after_validate(
         self, state: AgentState
     ) -> Literal["agent", "fallback", "propose", "__end__"]:
@@ -197,7 +215,7 @@ class _InvestigationNodes:
                 return "fallback"
             return "agent"
         is_selector_fault = diagnosis["category"] == FaultCategory.SERVICE_SELECTOR_MISMATCH
-        if self._can_remediate and diagnosis.get("proposed_fix") and is_selector_fault:
+        if self._can_remediate and is_selector_fault:
             return "propose"
         return "__end__"
 
@@ -236,8 +254,12 @@ class _RemediationNodes:
 
     def propose(self, state: AgentState) -> dict[str, Any]:
         fix = Diagnosis.model_validate(state["diagnosis"]).proposed_fix
-        if fix is None:  # routing only sends diagnoses with a proposed fix here
-            raise RuntimeError("propose reached without a proposed fix")
+        if fix is None:
+            return _remediation_outcome(
+                approved=False,
+                applied=False,
+                message="No fix proposed: the diagnosis did not include the corrected selector.",
+            )
         with observe("remediation.propose", "span", input_value=fix) as span:
             proposal = build_proposal(self._kube, state["namespace"], fix)
             set_output(span, proposal if isinstance(proposal, str) else proposal.model_dump())
