@@ -71,7 +71,7 @@ errored on a free-tier quota limit and is reported separately. See the
 
 ## Setup
 
-Requirements: **Docker**, **kind** and **kubectl**. Everything else runs in containers. For local
+Requirements: **Docker**, **kind**, **kubectl** and **make**. Everything else runs in containers. For local
 development without Docker you also need [uv](https://docs.astral.sh/uv/).
 
 ```bash
