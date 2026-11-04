@@ -5,14 +5,9 @@ import pytest
 
 from k8s_aiops_agent.fixture_kube import FIXTURE_FILE, FixtureKube, record_namespace
 from k8s_aiops_agent.kube import KubeError
+from tests.builders import SCENARIOS_DIR
 
-SCENARIOS = Path("scenarios")
-RECORDED = sorted(SCENARIOS.glob(f"*/{FIXTURE_FILE}"))
-
-
-@pytest.fixture(scope="module")
-def kube() -> FixtureKube:
-    return FixtureKube.from_dir(SCENARIOS)
+RECORDED = sorted(SCENARIOS_DIR.glob(f"*/{FIXTURE_FILE}"))
 
 
 def first_pod(kube: FixtureKube, namespace: str) -> str:

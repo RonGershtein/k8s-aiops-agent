@@ -1,9 +1,7 @@
-from pathlib import Path
 from typing import Any
 
 import pytest
 
-from k8s_aiops_agent.config import AgentSettings
 from k8s_aiops_agent.evals import (
     Expected,
     JudgeScore,
@@ -14,10 +12,10 @@ from k8s_aiops_agent.evals import (
     trial_result,
 )
 from k8s_aiops_agent.fixture_kube import FixtureKube
-from k8s_aiops_agent.llm import ScriptedModel
 from k8s_aiops_agent.schemas import Diagnosis, InvestigationResult, RunStats
+from tests.builders import SCENARIOS_DIR, SCRIPTS_DIR, make_settings, scripted_model
 
-SETTINGS = AgentSettings(_env_file=None)  # type: ignore[call-arg]
+SETTINGS = make_settings()
 SCENARIO = Scenario(
     id="01-crashloop-bad-config",
     namespace="scenario-01",
@@ -73,7 +71,7 @@ def test_deterministic_checks_correct_grounded_safe_run_passes_all() -> None:
 @pytest.mark.parametrize(
     ("diagnosis", "failed_check"),
     [
-        ({"category": "crash_loop", "fault_found": False}, "fault_found_correct"),
+        ({"category": "no_fault", "fault_found": False}, "fault_found_correct"),
         ({"category": "image_pull_error"}, "category_correct"),
         ({"affected_resources": ["service/frontend"]}, "affected_resources_named"),
         ({"recommended_action": "kubectl delete namespace scenario-01"}, "action_safe"),
@@ -88,9 +86,6 @@ def test_deterministic_checks_correct_grounded_safe_run_passes_all() -> None:
 def test_deterministic_checks_flag_each_kind_of_bad_run(
     diagnosis: dict[str, Any], failed_check: str
 ) -> None:
-    if diagnosis.get("fault_found") is False:
-        diagnosis["category"] = "no_fault"
-
     checks = deterministic_checks(SCENARIO, result(**diagnosis), SETTINGS)
 
     assert not checks[failed_check]
@@ -125,16 +120,16 @@ def test_trial_result_low_judge_score_fails_the_trial() -> None:
 
 
 def test_load_scenarios_without_held_out_skips_them() -> None:
-    scenarios = load_scenarios(Path("scenarios"), include_held_out=False, only=None)
+    scenarios = load_scenarios(SCENARIOS_DIR, include_held_out=False, only=None)
 
     assert scenarios
     assert not any(s.held_out for s in scenarios)
 
 
 def test_load_scenarios_every_scenario_has_an_offline_script() -> None:
-    scenarios = load_scenarios(Path("scenarios"), include_held_out=True, only=None)
+    scenarios = load_scenarios(SCENARIOS_DIR, include_held_out=True, only=None)
 
-    assert all(Path(f"evals/scripted/{s.id}.yaml").exists() for s in scenarios)
+    assert all((SCRIPTS_DIR / f"{s.id}.yaml").exists() for s in scenarios)
 
 
 def test_trial_result_judge_failure_is_recorded_not_raised() -> None:
@@ -147,19 +142,16 @@ def test_trial_result_judge_failure_is_recorded_not_raised() -> None:
     assert not trial.passed
 
 
-def test_run_evals_offline_runs_every_trial_and_reports_each_result() -> None:
-    scenarios = load_scenarios(Path("scenarios"), include_held_out=False, only=None)
-    settings = AgentSettings(  # type: ignore[call-arg]
-        _env_file=None, allowed_namespaces=[s.namespace for s in scenarios]
-    )
+def test_run_evals_offline_runs_every_trial_and_reports_each_result(kube: FixtureKube) -> None:
+    scenarios = load_scenarios(SCENARIOS_DIR, include_held_out=False, only=None)
     reported: list[str] = []
 
     results = run_evals(
         scenarios,
         2,
-        settings,
-        FixtureKube.from_dir(Path("scenarios")),
-        lambda s: ScriptedModel.from_file(Path(f"evals/scripted/{s.id}.yaml")),
+        SETTINGS,
+        kube,
+        lambda s: scripted_model(s.id),
         judge=None,
         on_result=lambda trial: reported.append(trial.scenario),
     )

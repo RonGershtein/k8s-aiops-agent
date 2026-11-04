@@ -82,7 +82,7 @@ def shutdown_tracing() -> None:
 @contextmanager
 def observe(name: str, kind: str, input_value: Any = None, **attributes: Any) -> Iterator[Span]:
     """A span Langfuse renders as an observation of `kind` (agent, generation, tool, span...)."""
-    tracer = trace.get_tracer(TRACER_NAME)
+    tracer = (_provider or trace.get_tracer_provider()).get_tracer(TRACER_NAME)
     with tracer.start_as_current_span(name, record_exception=False) as span:
         span.set_attribute("langfuse.observation.type", kind)
         if input_value is not None:

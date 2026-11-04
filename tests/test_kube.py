@@ -1,6 +1,4 @@
-import json
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -8,69 +6,71 @@ from kubernetes.client.exceptions import ApiException
 from urllib3.exceptions import MaxRetryError
 
 from k8s_aiops_agent.kube import PREVIOUS_LOGS_UNAVAILABLE, KubeError, LiveKube
+from tests.builders import api_error
 
 READONLY_KUBECONFIG = Path(".kube/agent-readonly.kubeconfig")
 
 
-def live_kube_with_core(core: Any) -> LiveKube:
+@pytest.fixture
+def stubbed_kube(core: MagicMock) -> LiveKube:
+    """LiveKube over a mocked CoreV1Api, so client behaviour is tested without a cluster."""
     return LiveKube(core, MagicMock(), MagicMock())
 
 
-def api_error(status: int, message: str) -> ApiException:
-    error = ApiException(status=status, reason="Error")
-    error.body = json.dumps({"message": message})
-    return error
-
-
-def test_get_pod_logs_previous_unavailable_falls_back_to_current_logs() -> None:
-    core = MagicMock()
+def test_get_pod_logs_previous_unavailable_falls_back_to_current_logs(
+    core: MagicMock, stubbed_kube: LiveKube
+) -> None:
     core.read_namespaced_pod_log.side_effect = [
         api_error(400, "unable to retrieve container logs"),
         "FATAL config",
     ]
 
-    logs = live_kube_with_core(core).get_pod_logs("ns", "pod", previous=True)
+    logs = stubbed_kube.get_pod_logs("ns", "pod", previous=True)
 
     assert logs == PREVIOUS_LOGS_UNAVAILABLE + "FATAL config"
 
 
-def test_get_pod_logs_previous_gone_reported_in_body_falls_back_to_current() -> None:
-    core = MagicMock()
+def test_get_pod_logs_previous_gone_reported_in_body_falls_back_to_current(
+    core: MagicMock, stubbed_kube: LiveKube
+) -> None:
     core.read_namespaced_pod_log.side_effect = [
         "unable to retrieve container logs for containerd://abc",
         "FATAL config",
     ]
 
-    logs = live_kube_with_core(core).get_pod_logs("ns", "pod", previous=True)
+    logs = stubbed_kube.get_pod_logs("ns", "pod", previous=True)
 
     assert logs == PREVIOUS_LOGS_UNAVAILABLE + "FATAL config"
 
 
-def test_get_pod_logs_previous_forbidden_raises_instead_of_falling_back() -> None:
-    core = MagicMock()
+def test_get_pod_logs_previous_forbidden_raises_instead_of_falling_back(
+    core: MagicMock, stubbed_kube: LiveKube
+) -> None:
     core.read_namespaced_pod_log.side_effect = api_error(403, "forbidden")
 
     with pytest.raises(KubeError) as raised:
-        live_kube_with_core(core).get_pod_logs("ns", "pod", previous=True)
+        stubbed_kube.get_pod_logs("ns", "pod", previous=True)
 
     assert raised.value.status == 403
     assert core.read_namespaced_pod_log.call_count == 1
 
 
-def test_live_kube_api_error_surfaces_server_message() -> None:
-    core = MagicMock()
+def test_live_kube_api_error_surfaces_server_message(
+    core: MagicMock, stubbed_kube: LiveKube
+) -> None:
     core.read_namespaced_config_map.side_effect = api_error(404, 'configmaps "x" not found')
 
     with pytest.raises(KubeError, match='configmaps "x" not found'):
-        live_kube_with_core(core).get_configmap("ns", "x")
+        stubbed_kube.get_configmap("ns", "x")
 
 
-def test_live_kube_unreachable_cluster_raises_kube_error() -> None:
-    core = MagicMock()
+def test_live_kube_unreachable_cluster_raises_kube_error(
+    core: MagicMock, stubbed_kube: LiveKube
+) -> None:
     core.list_namespaced_pod.side_effect = MaxRetryError(None, "https://127.0.0.1:6443")
 
     with pytest.raises(KubeError, match="cluster unreachable"):
-        live_kube_with_core(core).list_pods("ns")
+        stubbed_kube.list_pods("ns")
 
 
 @pytest.fixture
