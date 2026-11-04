@@ -4,9 +4,8 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from kubernetes import client, config
-from kubernetes.client.exceptions import ApiException
 
-from k8s_aiops_agent.kube import Json, KubeError, KubeGateway
+from k8s_aiops_agent.kube import Json, KubeError, KubeGateway, call_api
 from k8s_aiops_agent.schemas import RemediationProposal, ServiceSelectorFix
 
 
@@ -32,10 +31,7 @@ class LiveSelectorPatcher:
     ) -> None:
         # JSON patch "replace" swaps the whole selector, so stale keys cannot survive a merge.
         body = [{"op": "replace", "path": "/spec/selector", "value": selector}]
-        try:
-            self._core.patch_namespaced_service(service, namespace, body, _request_timeout=10)
-        except ApiException as error:
-            raise KubeError(error.status or 0, str(error.reason)) from error
+        call_api(self._core.patch_namespaced_service, service, namespace, body)
 
 
 def build_proposal(

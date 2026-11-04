@@ -57,11 +57,11 @@ class LiveKube:
         return cls(client.CoreV1Api(api), client.AppsV1Api(api), client.DiscoveryV1Api(api))
 
     def list_pods(self, namespace: str) -> list[Json]:
-        pods = _call(self._core.list_namespaced_pod, namespace)
+        pods = call_api(self._core.list_namespaced_pod, namespace)
         return [self._pod_summary(pod) for pod in pods.items]
 
     def list_deployments(self, namespace: str) -> list[Json]:
-        deployments = _call(self._apps.list_namespaced_deployment, namespace)
+        deployments = call_api(self._apps.list_namespaced_deployment, namespace)
         return [
             {
                 "name": d.metadata.name,
@@ -73,14 +73,14 @@ class LiveKube:
         ]
 
     def list_services(self, namespace: str) -> list[Json]:
-        services = _call(self._core.list_namespaced_service, namespace)
+        services = call_api(self._core.list_namespaced_service, namespace)
         return [
             {"name": s.metadata.name, "type": s.spec.type, "selector": s.spec.selector or {}}
             for s in services.items
         ]
 
     def describe_pod(self, namespace: str, name: str) -> Json:
-        pod = _call(self._core.read_namespaced_pod, name, namespace)
+        pod = call_api(self._core.read_namespaced_pod, name, namespace)
         return {
             **self._pod_summary(pod),
             "conditions": self._plain(pod.status.conditions or []),
@@ -97,7 +97,7 @@ class LiveKube:
         tail_lines: int = 100,
     ) -> str:
         def read(prev: bool) -> str:
-            logs: str = _call(
+            logs: str = call_api(
                 self._core.read_namespaced_pod_log,
                 name,
                 namespace,
@@ -123,7 +123,7 @@ class LiveKube:
 
     def get_events(self, namespace: str, involved_object: str | None = None) -> list[Json]:
         selector = f"involvedObject.name={involved_object}" if involved_object else None
-        events = _call(self._core.list_namespaced_event, namespace, field_selector=selector)
+        events = call_api(self._core.list_namespaced_event, namespace, field_selector=selector)
         items = sorted(events.items, key=_event_time)[-MAX_EVENTS:]
         return [
             {
@@ -138,7 +138,7 @@ class LiveKube:
         ]
 
     def get_deployment(self, namespace: str, name: str) -> Json:
-        d = _call(self._apps.read_namespaced_deployment, name, namespace)
+        d = call_api(self._apps.read_namespaced_deployment, name, namespace)
         return {
             "name": d.metadata.name,
             "replicas": d.spec.replicas,
@@ -151,8 +151,8 @@ class LiveKube:
         }
 
     def get_service_and_endpoints(self, namespace: str, name: str) -> Json:
-        svc = _call(self._core.read_namespaced_service, name, namespace)
-        slices = _call(
+        svc = call_api(self._core.read_namespaced_service, name, namespace)
+        slices = call_api(
             self._discovery.list_namespaced_endpoint_slice,
             namespace,
             label_selector=f"kubernetes.io/service-name={name}",
@@ -176,7 +176,7 @@ class LiveKube:
         }
 
     def get_configmap(self, namespace: str, name: str) -> Json:
-        cm = _call(self._core.read_namespaced_config_map, name, namespace)
+        cm = call_api(self._core.read_namespaced_config_map, name, namespace)
         return {"name": cm.metadata.name, "data": cm.data or {}}
 
     def _pod_summary(self, pod: Any) -> Json:
@@ -209,7 +209,8 @@ class LiveKube:
         return {key: value for key, value in spec.items() if value}
 
 
-def _call(method: Any, *args: Any, **kwargs: Any) -> Any:
+def call_api(method: Any, *args: Any, **kwargs: Any) -> Any:
+    """Calls the Kubernetes client with a timeout; every failure becomes a KubeError."""
     try:
         return method(*args, _request_timeout=REQUEST_TIMEOUT_SECONDS, **kwargs)
     except ApiException as error:
