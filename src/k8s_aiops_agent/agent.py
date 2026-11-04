@@ -71,20 +71,27 @@ class Remediation:
     approve: Callable[[RemediationProposal], bool]
 
 
-def build_graph(
-    settings: AgentSettings, kube: KubeGateway, model: ChatModel, remediation: Remediation | None
-) -> CompiledStateGraph[Any, Any, Any, Any]:
-    tools = anthropic_tool_definitions()
+class _InvestigationNodes:
+    """The investigation loop: model call, tools, budgets, validation, inconclusive fallback."""
 
-    def agent(state: AgentState) -> dict[str, Any]:
+    def __init__(
+        self, settings: AgentSettings, kube: KubeGateway, model: ChatModel, can_remediate: bool
+    ) -> None:
+        self._settings = settings
+        self._kube = kube
+        self._model = model
+        self._can_remediate = can_remediate
+        self._tools = anthropic_tool_definitions()
+
+    def agent(self, state: AgentState) -> dict[str, Any]:
         with observe(
             "model.call",
             "generation",
             input_value=state["messages"][-1],
-            **{"gen_ai.request.model": model.name, "gen_ai.operation.name": "chat"},
+            **{"gen_ai.request.model": self._model.name, "gen_ai.operation.name": "chat"},
         ) as span:
             try:
-                turn = model.create(SYSTEM_PROMPT, state["messages"], tools)
+                turn = self._model.create(SYSTEM_PROMPT, state["messages"], self._tools)
             except ModelError as error:
                 mark_error(span, str(error))
                 return {"stop_reason": "model_error"}
@@ -105,7 +112,7 @@ def build_graph(
         return update
 
     def route_after_agent(
-        state: AgentState,
+        self, state: AgentState
     ) -> Literal["tools", "validate", "finalize", "nudge", "fallback"]:
         if state.get("stop_reason") in ("model_error", "model_refusal"):
             return "fallback"
@@ -114,11 +121,11 @@ def build_graph(
             return "validate"
         if state.get("finalizing"):
             return "fallback"
-        if _budget_exceeded(state, settings):
+        if _budget_exceeded(state, self._settings):
             return "finalize"
         return "tools" if tool_uses else "nudge"
 
-    def tools_node(state: AgentState) -> dict[str, Any]:
+    def tools(self, state: AgentState) -> dict[str, Any]:
         seen = {_call_key(r["name"], r["args"]): r["id"] for r in state.get("ledger", [])}
         results: list[dict[str, Any]] = []
         records: list[dict[str, Any]] = []
@@ -130,21 +137,7 @@ def build_graph(
                 text = f"Duplicate call: this was already answered as {seen[key]}; reuse it."
                 results.append(_tool_result(call["id"], text, is_error=True))
                 continue
-            record_id = f"t{len(state.get('ledger', [])) + len(records) + 1}"
-            with observe(f"tool.{call['name']}", "tool", input_value=call["input"]) as span:
-                record = run_tool(
-                    kube,
-                    record_id,
-                    call["name"],
-                    call["input"],
-                    settings.allowed_namespaces,
-                    settings.max_tool_output_chars,
-                )
-                span.set_attribute("evidence_id", record.id)
-                span.set_attribute("tool.latency_ms", record.latency_ms)
-                set_output(span, record.error or record.output)
-                if record.error:
-                    mark_error(span, record.error)
+            record = self._run_tool(f"t{len(state.get('ledger', [])) + len(records) + 1}", call)
             seen[key] = record.id
             records.append(record.to_dict())
             results.append(_tool_result(call["id"], tool_result_text(record), bool(record.error)))
@@ -154,11 +147,11 @@ def build_graph(
             "repeated_calls": repeated,
         }
 
-    def nudge(state: AgentState) -> dict[str, Any]:
+    def nudge(self, state: AgentState) -> dict[str, Any]:
         return {"messages": [{"role": "user", "content": NO_TOOL_CALL_PROMPT}]}
 
-    def finalize(state: AgentState) -> dict[str, Any]:
-        reason = _budget_exceeded(state, settings) or "max_steps"
+    def finalize(self, state: AgentState) -> dict[str, Any]:
+        reason = _budget_exceeded(state, self._settings) or "max_steps"
         skipped = [
             _tool_result(t["id"], "Not executed: investigation budget used up.", is_error=True)
             for t in _tool_uses(state)
@@ -166,7 +159,7 @@ def build_graph(
         prompt = {"type": "text", "text": FINALIZE_PROMPT.format(reason=reason)}
         return {"messages": [{"role": "user", "content": [*skipped, prompt]}], "finalizing": reason}
 
-    def validate(state: AgentState) -> dict[str, Any]:
+    def validate(self, state: AgentState) -> dict[str, Any]:
         calls = _tool_uses(state)
         submit = next(t for t in calls if t["name"] == SUBMIT_DIAGNOSIS)
         with observe("validate_diagnosis", "evaluator", input_value=submit["input"]) as span:
@@ -192,7 +185,7 @@ def build_graph(
         }
 
     def route_after_validate(
-        state: AgentState,
+        self, state: AgentState
     ) -> Literal["agent", "fallback", "propose", "__end__"]:
         diagnosis = state.get("diagnosis")
         if diagnosis is None:
@@ -200,69 +193,83 @@ def build_graph(
                 return "fallback"
             return "agent"
         is_selector_fault = diagnosis["category"] == FaultCategory.SERVICE_SELECTOR_MISMATCH
-        if remediation and diagnosis.get("proposed_fix") and is_selector_fault:
+        if self._can_remediate and diagnosis.get("proposed_fix") and is_selector_fault:
             return "propose"
         return "__end__"
 
-    def fallback(state: AgentState) -> dict[str, Any]:
+    def fallback(self, state: AgentState) -> dict[str, Any]:
         reason = state.get("stop_reason") or state.get("finalizing") or "invalid_diagnosis"
-        return {
-            "diagnosis": fallback_diagnosis(reason, state.get("ledger", [])).model_dump(
-                mode="json"
-            ),
-            "stop_reason": reason,
-        }
+        diagnosis = fallback_diagnosis(reason, state.get("ledger", []))
+        return {"diagnosis": diagnosis.model_dump(mode="json"), "stop_reason": reason}
 
-    def propose(state: AgentState) -> dict[str, Any]:
-        diagnosis = Diagnosis.model_validate(state["diagnosis"])
-        assert diagnosis.proposed_fix is not None
-        with observe("remediation.propose", "span", input_value=diagnosis.proposed_fix) as span:
-            proposal = build_proposal(kube, state["namespace"], diagnosis.proposed_fix)
+    def _run_tool(self, record_id: str, call: dict[str, Any]) -> ToolRecord:
+        with observe(f"tool.{call['name']}", "tool", input_value=call["input"]) as span:
+            record = run_tool(
+                self._kube,
+                record_id,
+                call["name"],
+                call["input"],
+                self._settings.allowed_namespaces,
+                self._settings.max_tool_output_chars,
+            )
+            span.set_attribute("evidence_id", record.id)
+            span.set_attribute("tool.latency_ms", record.latency_ms)
+            set_output(span, record.error or record.output)
+            if record.error:
+                mark_error(span, record.error)
+        return record
+
+
+class _RemediationNodes:
+    """propose -> approve (human, via interrupt) -> apply -> verify, for the one supported fix."""
+
+    def __init__(
+        self, settings: AgentSettings, kube: KubeGateway, remediation: Remediation
+    ) -> None:
+        self._settings = settings
+        self._kube = kube
+        self._remediation = remediation
+
+    def propose(self, state: AgentState) -> dict[str, Any]:
+        fix = Diagnosis.model_validate(state["diagnosis"]).proposed_fix
+        if fix is None:  # routing only sends diagnoses with a proposed fix here
+            raise RuntimeError("propose reached without a proposed fix")
+        with observe("remediation.propose", "span", input_value=fix) as span:
+            proposal = build_proposal(self._kube, state["namespace"], fix)
             set_output(span, proposal if isinstance(proposal, str) else proposal.model_dump())
         if isinstance(proposal, str):
-            outcome = RemediationOutcome(
-                approved=False,
-                applied=False,
-                resolved=False,
-                message=f"No fix proposed: {proposal}",
-            )
-            return {"remediation": outcome.model_dump(mode="json")}
+            return _outcome(approved=False, applied=False, message=f"No fix proposed: {proposal}")
         return {"proposal": proposal.model_dump(mode="json")}
 
-    def route_after_propose(state: AgentState) -> Literal["approve", "__end__"]:
+    def route_after_propose(self, state: AgentState) -> Literal["approve", "__end__"]:
         return "approve" if state.get("proposal") else "__end__"
 
-    def approve(state: AgentState) -> Command[Literal["apply", "__end__"]]:
+    def approve(self, state: AgentState) -> Command[Literal["apply", "__end__"]]:
         # Pauses the graph; the caller shows the proposal to a human and resumes with their answer.
         approved = bool(interrupt(state["proposal"]))
         with observe("remediation.approval", "span", input_value=state["proposal"]) as span:
             set_output(span, {"approved": approved})
         if approved:
             return Command(goto="apply")
-        outcome = RemediationOutcome(
-            approved=False, applied=False, resolved=False, message="Fix declined by the operator."
-        )
-        return Command(goto="__end__", update={"remediation": outcome.model_dump(mode="json")})
+        declined = _outcome(approved=False, applied=False, message="Fix declined by the operator.")
+        return Command(goto="__end__", update=declined)
 
-    def apply(state: AgentState) -> dict[str, Any]:
-        assert remediation is not None
+    def apply(self, state: AgentState) -> dict[str, Any]:
         proposal = RemediationProposal.model_validate(state["proposal"])
         with observe("remediation.apply", "tool", input_value=proposal.model_dump()) as span:
             try:
-                remediation.patcher.patch_service_selector(
+                self._remediation.patcher.patch_service_selector(
                     proposal.namespace, proposal.service, proposal.proposed_selector
                 )
             except KubeError as error:
                 mark_error(span, str(error))
-                outcome = RemediationOutcome(
-                    approved=True, applied=False, resolved=False, message=f"Patch failed: {error}"
-                )
-                return {"remediation": outcome.model_dump(mode="json")}
+                return _outcome(approved=True, applied=False, message=f"Patch failed: {error}")
         return {}
 
-    def verify(state: AgentState) -> dict[str, Any]:
-        if state.get("remediation"):
-            return {}
+    def route_after_apply(self, state: AgentState) -> Literal["verify", "__end__"]:
+        return "__end__" if state.get("remediation") else "verify"
+
+    def verify(self, state: AgentState) -> dict[str, Any]:
         proposal = RemediationProposal.model_validate(state["proposal"])
         args = {"namespace": proposal.namespace, "name": proposal.service}
         ledger_size = len(state.get("ledger", []))
@@ -272,12 +279,12 @@ def build_graph(
                 if attempt:
                     time.sleep(VERIFY_INTERVAL_SECONDS)
                 record = run_tool(
-                    kube,
+                    self._kube,
                     f"v{ledger_size + attempt + 1}",
                     "get_service_and_endpoints",
                     args,
-                    settings.allowed_namespaces,
-                    settings.max_tool_output_chars,
+                    self._settings.allowed_namespaces,
+                    self._settings.max_tool_output_chars,
                 )
                 records.append(record)
                 if routes_to(record, proposal.matching_ready_pods):
@@ -285,53 +292,58 @@ def build_graph(
             last = records[-1]
             resolved = routes_to(last, proposal.matching_ready_pods)
             set_output(span, {"resolved": resolved, "attempts": len(records)})
-        outcome = RemediationOutcome(
-            approved=True,
-            applied=True,
-            resolved=resolved,
-            verification=[
-                Evidence(
-                    claim="Fresh read of the Service and its endpoints after the patch.",
-                    tool_call_id=last.id,
-                    excerpt=(last.error or last.output)[:300],
-                )
-            ],
-            message=(
-                f"Resolved: {proposal.service} now has ready endpoints for "
-                f"{', '.join(proposal.matching_ready_pods)}."
-                if resolved
-                else f"Not resolved after {len(records)} checks; endpoints did not converge."
-            ),
+        evidence = Evidence(
+            claim="Fresh read of the Service and its endpoints after the patch.",
+            tool_call_id=last.id,
+            excerpt=(last.error or last.output)[:300],
+        )
+        message = (
+            f"Resolved: {proposal.service} now has ready endpoints for "
+            f"{', '.join(proposal.matching_ready_pods)}."
+            if resolved
+            else f"Not resolved after {len(records)} checks; endpoints did not converge."
         )
         return {
             "ledger": [r.to_dict() for r in records],
-            "remediation": outcome.model_dump(mode="json"),
+            **_outcome(
+                approved=True,
+                applied=True,
+                resolved=resolved,
+                message=message,
+                verification=[evidence],
+            ),
         }
 
+
+def build_graph(
+    settings: AgentSettings, kube: KubeGateway, model: ChatModel, remediation: Remediation | None
+) -> CompiledStateGraph[Any, Any, Any, Any]:
+    investigation = _InvestigationNodes(
+        settings, kube, model, can_remediate=remediation is not None
+    )
     graph = StateGraph(AgentState)
-    for name, node in [
-        ("agent", agent),
-        ("tools", tools_node),
-        ("nudge", nudge),
-        ("finalize", finalize),
-        ("validate", validate),
-        ("fallback", fallback),
-        ("propose", propose),
-        ("approve", approve),
-        ("apply", apply),
-        ("verify", verify),
-    ]:
-        graph.add_node(name, node)
+    graph.add_node("agent", investigation.agent)
+    graph.add_node("tools", investigation.tools)
+    graph.add_node("nudge", investigation.nudge)
+    graph.add_node("finalize", investigation.finalize)
+    graph.add_node("validate", investigation.validate)
+    graph.add_node("fallback", investigation.fallback)
     graph.add_edge(START, "agent")
-    graph.add_conditional_edges("agent", route_after_agent)
-    graph.add_edge("tools", "agent")
-    graph.add_edge("nudge", "agent")
-    graph.add_edge("finalize", "agent")
-    graph.add_conditional_edges("validate", route_after_validate)
+    graph.add_conditional_edges("agent", investigation.route_after_agent)
+    for loop_back in ("tools", "nudge", "finalize"):
+        graph.add_edge(loop_back, "agent")
+    after_validate = ["agent", "fallback", END] + (["propose"] if remediation else [])
+    graph.add_conditional_edges("validate", investigation.route_after_validate, after_validate)
     graph.add_edge("fallback", END)
-    graph.add_conditional_edges("propose", route_after_propose)
-    graph.add_edge("apply", "verify")
-    graph.add_edge("verify", END)
+    if remediation is not None:
+        fix = _RemediationNodes(settings, kube, remediation)
+        graph.add_node("propose", fix.propose)
+        graph.add_node("approve", fix.approve)
+        graph.add_node("apply", fix.apply)
+        graph.add_node("verify", fix.verify)
+        graph.add_conditional_edges("propose", fix.route_after_propose)
+        graph.add_conditional_edges("apply", fix.route_after_apply)
+        graph.add_edge("verify", END)
     return graph.compile(checkpointer=InMemorySaver())
 
 
@@ -361,8 +373,7 @@ def investigate(
             },
             config,
         )
-        while state.get("__interrupt__"):
-            assert remediation is not None
+        while state.get("__interrupt__") and remediation is not None:
             proposal = RemediationProposal.model_validate(state["__interrupt__"][0].value)
             state = graph.invoke(Command(resume=remediation.approve(proposal)), config)
         result = InvestigationResult(
@@ -374,7 +385,7 @@ def investigate(
                 input_tokens=state.get("input_tokens", 0),
                 output_tokens=state.get("output_tokens", 0),
                 latency_ms=int((time.monotonic() - started) * 1000),
-                stop_reason=state.get("stop_reason") or "diagnosis_submitted",
+                stop_reason=state["stop_reason"],
                 trace_id=trace_id,
             ),
             remediation=RemediationOutcome.model_validate(state["remediation"])
@@ -385,6 +396,17 @@ def investigate(
         set_output(span, result.diagnosis.model_dump(mode="json"))
         span.set_attribute("stop_reason", result.stats.stop_reason)
     return result
+
+
+def _outcome(*, approved: bool, applied: bool, message: str, **extra: Any) -> dict[str, Any]:
+    outcome = RemediationOutcome(
+        approved=approved,
+        applied=applied,
+        resolved=extra.pop("resolved", False),
+        message=message,
+        **extra,
+    )
+    return {"remediation": outcome.model_dump(mode="json")}
 
 
 def check_diagnosis(
