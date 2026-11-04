@@ -1,4 +1,5 @@
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -25,8 +26,13 @@ from k8s_aiops_agent.kube import KubeGateway, LiveKube
 from k8s_aiops_agent.llm import build_model
 from k8s_aiops_agent.mcp_server import build_mcp_server
 from k8s_aiops_agent.remediation import LiveSelectorPatcher
-from k8s_aiops_agent.schemas import FaultCategory, InvestigationResult, RemediationProposal
-from k8s_aiops_agent.telemetry import setup_tracing, shutdown_tracing
+from k8s_aiops_agent.schemas import (
+    Diagnosis,
+    FaultCategory,
+    InvestigationResult,
+    RemediationProposal,
+)
+from k8s_aiops_agent.telemetry import current_trace_id, setup_tracing, shutdown_tracing
 
 SCRIPTED_DIR = Path("evals/scripted")
 
@@ -53,7 +59,8 @@ def investigate_command(
         model = build_model(settings, script)
     except ValueError as error:
         raise _usage_error(str(error)) from error
-    remediation = _build_remediation(settings) if allow_remediation else None
+    approval = ApprovalPrompt(settings.trace_dir)
+    remediation = _build_remediation(settings, approval) if allow_remediation else None
     setup_tracing(settings)
     try:
         result = investigate(question, namespace, settings, kube, model, remediation)
@@ -61,6 +68,8 @@ def investigate_command(
         shutdown_tracing()
     if as_json:
         print(result.model_dump_json(indent=2))
+    elif approval.shown_findings:
+        _print_outcome(result)  # the investigation and diagnosis were shown before the prompt
     else:
         _print_result(result, settings.trace_dir)
 
@@ -185,7 +194,7 @@ def _build_kube(settings: AgentSettings) -> KubeGateway:
         raise _usage_error(f"cannot read kubeconfig {settings.kubeconfig}: {error}") from error
 
 
-def _build_remediation(settings: AgentSettings) -> Remediation:
+def _build_remediation(settings: AgentSettings, approval: "ApprovalPrompt") -> Remediation:
     path = settings.remediator_kubeconfig
     if settings.backend is not KubeBackend.LIVE or path is None:
         raise _usage_error(
@@ -195,63 +204,83 @@ def _build_remediation(settings: AgentSettings) -> Remediation:
         patcher = LiveSelectorPatcher.from_kubeconfig(path)
     except OSError as error:
         raise _usage_error(f"cannot read kubeconfig {path}: {error}") from error
-    return Remediation(patcher=patcher, approve=_ask_approval)
+    return Remediation(patcher=patcher, approve=approval)
 
 
-def _ask_approval(proposal: RemediationProposal) -> bool:
-    console.print(
-        Panel(
-            f"[bold]Patch Service {proposal.namespace}/{proposal.service} selector[/]\n"
-            + escape(
-                f"current:  {proposal.current_selector}\n"
-                f"proposed: {proposal.proposed_selector}\n"
-                f"matches Ready pods: {', '.join(proposal.matching_ready_pods)}\n\n"
-                f"Expected effect: {proposal.expected_effect}"
-            ),
-            title="Proposed fix (requires approval)",
-            border_style="yellow",
-        )
+@dataclass
+class ApprovalPrompt:
+    """Asks a human to approve the fix, after showing what was investigated and why."""
+
+    trace_dir: Path
+    shown_findings: bool = False
+
+    def __call__(self, proposal: RemediationProposal, diagnosis: Diagnosis) -> bool:
+        trace_id = current_trace_id()
+        if trace_id:
+            console.print(_trace_tree(self.trace_dir / f"{trace_id}.jsonl"))
+        console.print(_diagnosis_panel(diagnosis, "Diagnosis"))
+        console.print(_proposal_panel(proposal))
+        self.shown_findings = True
+        try:
+            return typer.confirm("Apply this change?", default=False, err=True)
+        except typer.Abort:
+            return False
+
+
+def _proposal_panel(proposal: RemediationProposal) -> Panel:
+    return Panel(
+        f"[bold]Patch Service {proposal.namespace}/{proposal.service} selector[/]\n"
+        + escape(
+            f"current:  {proposal.current_selector}\n"
+            f"proposed: {proposal.proposed_selector}\n"
+            f"matches Ready pods: {', '.join(proposal.matching_ready_pods)}\n\n"
+            f"Expected effect: {proposal.expected_effect}"
+        ),
+        title="Proposed fix (requires approval)",
+        border_style="yellow",
     )
-    try:
-        return typer.confirm("Apply this change?", default=False, err=True)
-    except typer.Abort:
-        return False
 
 
 def _print_result(result: InvestigationResult, trace_dir: Path) -> None:
-    diagnosis = result.diagnosis
     if result.stats.trace_id:
         console.print(_trace_tree(trace_dir / f"{result.stats.trace_id}.jsonl"))
+    console.print(_diagnosis_panel(result.diagnosis, f"Diagnosis: {result.question}"))
+    _print_outcome(result)
+
+
+def _diagnosis_panel(diagnosis: Diagnosis, title: str) -> Panel:
     evidence = "\n".join(
         escape(f"  [{e.tool_call_id}] {e.claim}\n      “{e.excerpt}”") for e in diagnosis.evidence
     )
     color = {FaultCategory.NO_FAULT: "green", FaultCategory.INCONCLUSIVE: "yellow"}.get(
         diagnosis.category, "red"
     )
-    console.print(
-        Panel(
-            f"[bold]{diagnosis.category.value}[/] (confidence {diagnosis.confidence:.0%})\n\n"
-            f"[bold]Root cause[/]\n  {escape(diagnosis.root_cause)}\n\n"
-            f"[bold]Evidence[/]\n{evidence}\n\n"
-            f"[bold]Recommended action[/] (risk: {diagnosis.action_risk})\n  "
-            f"{escape(diagnosis.recommended_action)}",
-            title=escape(f"Diagnosis: {result.question}"),
-            border_style=color,
-        )
+    return Panel(
+        f"[bold]{diagnosis.category.value}[/] (confidence {diagnosis.confidence:.0%})\n\n"
+        f"[bold]Root cause[/]\n  {escape(diagnosis.root_cause)}\n\n"
+        f"[bold]Evidence[/]\n{evidence}\n\n"
+        f"[bold]Recommended action[/] (risk: {diagnosis.action_risk})\n  "
+        f"{escape(diagnosis.recommended_action)}",
+        title=escape(title),
+        border_style=color,
     )
+
+
+def _print_outcome(result: InvestigationResult) -> None:
     if result.remediation:
-        r = result.remediation
+        remediation = result.remediation
         console.print(
             Panel(
-                escape(r.message),
+                escape(remediation.message),
                 title="Remediation",
-                border_style="green" if r.resolved else "yellow",
+                border_style="green" if remediation.resolved else "yellow",
             )
         )
-    s = result.stats
+    stats = result.stats
     console.print(
-        f"[dim]stop={s.stop_reason} steps={s.steps} tool_calls={s.tool_calls} "
-        f"tokens={s.input_tokens}+{s.output_tokens} latency={s.latency_ms}ms trace={s.trace_id}[/]"
+        f"[dim]stop={stats.stop_reason} steps={stats.steps} tool_calls={stats.tool_calls} "
+        f"tokens={stats.input_tokens}+{stats.output_tokens} latency={stats.latency_ms}ms "
+        f"trace={stats.trace_id}[/]"
     )
 
 

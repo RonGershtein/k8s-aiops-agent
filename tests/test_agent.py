@@ -10,7 +10,7 @@ from k8s_aiops_agent.evals import load_scenarios, trial_result
 from k8s_aiops_agent.fixture_kube import FixtureKube
 from k8s_aiops_agent.kube import KubeError
 from k8s_aiops_agent.llm import ModelError, ScriptedModel, build_model
-from k8s_aiops_agent.schemas import FaultCategory, RemediationProposal
+from k8s_aiops_agent.schemas import Diagnosis, FaultCategory, RemediationProposal
 from tests.builders import SCENARIOS_DIR, make_settings, scripted_model, tool_call
 
 
@@ -236,7 +236,7 @@ def test_remediation_approved_patches_and_verifies() -> None:
     cluster = FakeCluster()
     seen: list[RemediationProposal] = []
 
-    def approve(proposal: RemediationProposal) -> bool:
+    def approve(proposal: RemediationProposal, diagnosis: Diagnosis) -> bool:
         seen.append(proposal)
         return True
 
@@ -266,7 +266,7 @@ def test_remediation_declined_changes_nothing() -> None:
         make_settings(),
         cluster,
         ScriptedModel(selector_fix_turns()),  # type: ignore[arg-type]
-        Remediation(patcher=cluster, approve=lambda proposal: False),
+        Remediation(patcher=cluster, approve=lambda proposal, diagnosis: False),
     )
 
     assert cluster.patches == []
@@ -278,7 +278,7 @@ def test_remediation_declined_changes_nothing() -> None:
 def test_remediation_changed_service_is_not_patched() -> None:
     cluster = FakeCluster()
 
-    def approve_while_someone_edits(proposal: RemediationProposal) -> bool:
+    def approve_while_someone_edits(proposal: RemediationProposal, diagnosis: Diagnosis) -> bool:
         cluster.selector = {"app": "edited-meanwhile"}
         return True
 
@@ -303,7 +303,7 @@ def test_remediation_unresolved_polls_every_attempt(
     sleeps: list[float] = []
     monkeypatch.setattr(agent_module.time, "sleep", sleeps.append)
     cluster = FakeCluster()
-    ignore_patch = Remediation(patcher=MagicMock(), approve=lambda proposal: True)
+    ignore_patch = Remediation(patcher=MagicMock(), approve=lambda proposal, diagnosis: True)
 
     result = investigate(
         "q",
@@ -329,7 +329,9 @@ def test_remediation_without_ready_pods_is_not_proposed() -> None:
         make_settings(),
         cluster,
         ScriptedModel(selector_fix_turns()),  # type: ignore[arg-type]
-        Remediation(patcher=cluster, approve=lambda p: asked.append(p) or True),
+        Remediation(
+            patcher=cluster, approve=lambda proposal, diagnosis: asked.append(proposal) or True
+        ),
     )
 
     assert asked == []
@@ -370,7 +372,7 @@ def test_remediation_asks_once_for_a_missing_selector() -> None:
         make_settings(),
         cluster,
         ScriptedModel(turns),  # type: ignore[arg-type]
-        Remediation(patcher=cluster, approve=lambda proposal: True),
+        Remediation(patcher=cluster, approve=lambda proposal, diagnosis: True),
     )
 
     assert cluster.patches == [{"app": "frontend"}]
@@ -388,7 +390,7 @@ def test_remediation_without_selector_says_why() -> None:
         make_settings(),
         cluster,
         ScriptedModel(turns),  # type: ignore[arg-type]
-        Remediation(patcher=cluster, approve=lambda proposal: True),
+        Remediation(patcher=cluster, approve=lambda proposal, diagnosis: True),
     )
 
     assert cluster.patches == []

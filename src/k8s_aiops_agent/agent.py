@@ -76,7 +76,7 @@ class Remediation:
     """Enables the approval-gated fix path. The approver decides; the agent never self-approves."""
 
     patcher: SelectorPatcher
-    approve: Callable[[RemediationProposal], bool]
+    approve: Callable[[RemediationProposal, Diagnosis], bool]
 
 
 class _InvestigationNodes:
@@ -418,7 +418,8 @@ def investigate(
         )
         while state.get("__interrupt__") and remediation is not None:
             proposal = RemediationProposal.model_validate(state["__interrupt__"][0].value)
-            state = graph.invoke(Command(resume=remediation.approve(proposal)), config)
+            diagnosis = Diagnosis.model_validate(state["diagnosis"])
+            state = graph.invoke(Command(resume=remediation.approve(proposal, diagnosis)), config)
         latency_ms = int((time.monotonic() - started) * 1000)
         result = _result_from_state(question, state, latency_ms, trace_id)
         set_output(span, result.diagnosis.model_dump(mode="json"))
