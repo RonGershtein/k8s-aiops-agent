@@ -5,6 +5,55 @@ every claim with evidence from the tool call that produced it, and recommends th
 action. For one fault (a Service selector mismatch) it can also apply the fix after explicit human
 approval, then verifies the result with fresh evidence.
 
+## Quick start
+
+You need **Docker**, **kind**, **kubectl** and **make**. Everything else runs in containers.
+
+**1. Set up** (cluster, permissions, all six scenarios, `.env`, agent image; a few minutes the
+first time, seconds after that):
+
+```bash
+git clone https://github.com/RonGershtein/k8s-aiops-agent.git
+cd k8s-aiops-agent
+make up
+```
+
+**2. Add a model API key** to `.env` (`make up` created it):
+
+```bash
+AGENT_LLM_PROVIDER=gemini
+GEMINI_API_KEY=your-key        # free: https://aistudio.google.com/api-keys
+```
+
+Or use Claude: `AGENT_LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY=your-key`.
+
+**3. Wait about 60 seconds** for the faults to show (crash loops, failing probes, events).
+
+**4. Run it:**
+
+```bash
+make run S=01        # investigate a scenario: S=00 to S=05 (table below)
+make fix             # scenario 03: shows the investigation, the diagnosis and the proposed fix,
+                     # asks "Apply this change? [y/N]", patches on y, then verifies it worked
+make scenario-up S=03   # reset scenario 03 after a fix, to try again
+```
+
+| `S=` | Scenario | What is broken |
+|---|---|---|
+| 00 | healthy | nothing: the agent must say no fault |
+| 01 | crashloop-bad-config | a ConfigMap value crashes the app |
+| 02 | readiness-wrong-port | the readiness probe checks the wrong port |
+| 03 | service-selector-mismatch | the Service selects no pods (the one fix the agent can apply) |
+| 04 | image-pull-error | a misspelled image tag |
+| 05 | missing-configmap | the Deployment references a ConfigMap that does not exist |
+
+Ask your own question with `Q`: `make run S=02 Q="Why does catalog return no data?"`.
+
+**No API key?** `docker compose run --rm agent eval --llm scripted` runs every scenario offline
+against recorded snapshots and prints the eval report.
+
+**Clean up:** `make cluster-down`.
+
 A real run (Gemini 3.5 Flash-Lite on the recorded scenario 01 snapshot; long lines unwrapped and
 the panel's box borders removed, otherwise verbatim):
 
@@ -58,6 +107,7 @@ errored on a free-tier quota limit and is reported separately. See the
 
 ## Contents
 
+- [Quick start](#quick-start)
 - [Setup](#setup)
 - [Run the agent](#run-the-agent)
 - [Reproduce the failure scenarios](#reproduce-the-failure-scenarios)
