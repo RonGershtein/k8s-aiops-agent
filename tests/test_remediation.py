@@ -8,7 +8,7 @@ from k8s_aiops_agent.remediation import LiveSelectorPatcher
 from tests.builders import api_error
 
 
-def test_patch_service_selector_replaces_the_whole_selector_only_if_unchanged(
+def test_patch_selector_replaces_only_if_unchanged(
     core: MagicMock,
 ) -> None:
     patcher = LiveSelectorPatcher(core)

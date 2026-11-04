@@ -9,7 +9,7 @@ def load_settings() -> AgentSettings:
     return AgentSettings(_env_file=None)
 
 
-def test_settings_without_env_defaults_to_offline_scripted_fixture_mode() -> None:
+def test_settings_default_to_offline_mode() -> None:
     settings = load_settings()
 
     assert settings.llm_provider is LlmProvider.SCRIPTED
@@ -30,7 +30,7 @@ def test_settings_reads_allowed_namespaces_from_json_env(monkeypatch: pytest.Mon
     assert settings.allowed_namespaces == ["team-a", "team-b"]
 
 
-def test_settings_anthropic_provider_without_api_key_is_rejected(
+def test_settings_anthropic_without_key_is_rejected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("AGENT_LLM_PROVIDER", "anthropic")

@@ -76,11 +76,9 @@ jobs:
           config: deploy/kind-config.yaml
       - run: uv sync --frozen
       - run: make cluster-up
-      - name: Start all scenarios
-        run: for s in 00 01 02 03 04 05; do make scenario-up S=$s; done
+      - run: make scenarios-up
       - name: Let failures develop (restarts, probe failures, events)
         run: |
-          kubectl --context kind-aiops -n scenario-03 rollout status deploy/frontend --timeout=180s
           sleep 60
           kubectl --context kind-aiops get pods -A -l 'app in (web,checkout,catalog,frontend,inventory,orders)'
       - run: uv run pytest -m live

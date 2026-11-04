@@ -30,7 +30,7 @@ def test_diagnosis_with_valid_payload_parses() -> None:
     assert diagnosis.category is FaultCategory.CRASH_LOOP
 
 
-def test_diagnosis_inconclusive_without_evidence_or_fault_parses() -> None:
+def test_diagnosis_inconclusive_without_evidence_parses() -> None:
     payload = diagnosis_payload(fault_found=False, category="inconclusive", evidence=[])
 
     diagnosis = Diagnosis.model_validate(payload)
@@ -38,7 +38,7 @@ def test_diagnosis_inconclusive_without_evidence_or_fault_parses() -> None:
     assert diagnosis.category is FaultCategory.INCONCLUSIVE
 
 
-def test_diagnosis_inconclusive_claiming_a_fault_is_rejected() -> None:
+def test_diagnosis_inconclusive_with_fault_is_rejected() -> None:
     payload = diagnosis_payload(fault_found=True, category="inconclusive")
 
     with pytest.raises(ValidationError, match="inconclusive"):
@@ -52,7 +52,7 @@ def test_diagnosis_without_evidence_is_rejected() -> None:
         Diagnosis.model_validate(payload)
 
 
-def test_diagnosis_fault_found_with_no_fault_category_is_rejected() -> None:
+def test_diagnosis_fault_found_as_no_fault_is_rejected() -> None:
     payload = diagnosis_payload(fault_found=True, category="no_fault")
 
     with pytest.raises(ValidationError, match="no_fault"):

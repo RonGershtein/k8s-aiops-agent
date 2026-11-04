@@ -60,5 +60,9 @@ disallow_untyped_calls = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q --strict-markers"
-markers = ["live: needs a running kind cluster"]
+# Real-model tests cost quota, so they run only when asked for: `pytest -m llm`.
+addopts = "-q --strict-markers -m 'not llm'"
+markers = [
+    "live: needs a running kind cluster",
+    "llm: calls a real model API (needs GEMINI_API_KEY)",
+]

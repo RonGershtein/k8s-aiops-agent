@@ -17,9 +17,7 @@ def stubbed_kube(core: MagicMock) -> LiveKube:
     return LiveKube(core, MagicMock(), MagicMock())
 
 
-def test_get_pod_logs_previous_unavailable_falls_back_to_current_logs(
-    core: MagicMock, stubbed_kube: LiveKube
-) -> None:
+def test_previous_logs_unavailable_falls_back(core: MagicMock, stubbed_kube: LiveKube) -> None:
     core.read_namespaced_pod_log.side_effect = [
         api_error(400, "unable to retrieve container logs"),
         "FATAL config",
@@ -30,9 +28,7 @@ def test_get_pod_logs_previous_unavailable_falls_back_to_current_logs(
     assert logs == PREVIOUS_LOGS_UNAVAILABLE + "FATAL config"
 
 
-def test_get_pod_logs_previous_gone_reported_in_body_falls_back_to_current(
-    core: MagicMock, stubbed_kube: LiveKube
-) -> None:
+def test_previous_logs_gone_in_body_falls_back(core: MagicMock, stubbed_kube: LiveKube) -> None:
     core.read_namespaced_pod_log.side_effect = [
         "unable to retrieve container logs for containerd://abc",
         "FATAL config",
@@ -43,9 +39,7 @@ def test_get_pod_logs_previous_gone_reported_in_body_falls_back_to_current(
     assert logs == PREVIOUS_LOGS_UNAVAILABLE + "FATAL config"
 
 
-def test_get_pod_logs_previous_forbidden_raises_instead_of_falling_back(
-    core: MagicMock, stubbed_kube: LiveKube
-) -> None:
+def test_previous_logs_forbidden_raises(core: MagicMock, stubbed_kube: LiveKube) -> None:
     core.read_namespaced_pod_log.side_effect = api_error(403, "forbidden")
 
     with pytest.raises(KubeError) as raised:
@@ -90,7 +84,7 @@ def test_live_crashloop_scenario_logs_show_config_error(live_kube: LiveKube) -> 
 
 
 @pytest.mark.live
-def test_live_selector_mismatch_service_has_no_ready_endpoints(live_kube: LiveKube) -> None:
+def test_live_selector_mismatch_has_no_endpoints(live_kube: LiveKube) -> None:
     service = live_kube.get_service_and_endpoints("scenario-03", "frontend")
 
     assert service["selector"] == {"app": "frontend-v2"}
@@ -98,7 +92,7 @@ def test_live_selector_mismatch_service_has_no_ready_endpoints(live_kube: LiveKu
 
 
 @pytest.mark.live
-def test_live_discovery_lists_workloads_without_knowing_names(live_kube: LiveKube) -> None:
+def test_live_discovery_lists_workloads(live_kube: LiveKube) -> None:
     deployments = live_kube.list_deployments("scenario-02")
     services = live_kube.list_services("scenario-02")
 

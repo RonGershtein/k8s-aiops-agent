@@ -9,10 +9,11 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from k8s_aiops_agent.guards import ToolForbiddenError, ensure_namespace_allowed, redact, truncate
-from k8s_aiops_agent.kube import KubeError, KubeGateway
+from k8s_aiops_agent.kube import DEFAULT_LOG_LINES, KubeError, KubeGateway
 from k8s_aiops_agent.schemas import Diagnosis
 
 SUBMIT_DIAGNOSIS = "submit_diagnosis"
+MAX_LOG_LINES = 500
 
 
 class NamespaceArgs(BaseModel):
@@ -29,7 +30,7 @@ class LogArgs(NamedArgs):
     previous: bool = Field(
         default=False, description="Logs of the previous (crashed) container instance."
     )
-    tail_lines: int = Field(default=100, ge=1, le=500)
+    tail_lines: int = Field(default=DEFAULT_LOG_LINES, ge=1, le=MAX_LOG_LINES)
 
 
 class EventArgs(NamespaceArgs):

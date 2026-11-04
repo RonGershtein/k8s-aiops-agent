@@ -11,7 +11,7 @@ import statistics
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import anthropic
 import httpx
@@ -23,14 +23,19 @@ from k8s_aiops_agent.config import AgentSettings
 from k8s_aiops_agent.guards import normalize_text
 from k8s_aiops_agent.kube import KubeGateway
 from k8s_aiops_agent.llm import ChatModel, ModelError, inline_refs, post_gemini
-from k8s_aiops_agent.schemas import InvestigationResult
-from k8s_aiops_agent.telemetry import langfuse_auth_header
+from k8s_aiops_agent.schemas import InvestigationResult, StopReason
+from k8s_aiops_agent.telemetry import LANGFUSE_TIMEOUT_SECONDS, langfuse_auth_header
 
 logger = logging.getLogger(__name__)
 
 SCENARIO_FILE = "scenario.yaml"
 # The budget is checked between model calls, so the final call may overshoot it.
 TOKEN_BUDGET_SLACK = 1.5
+JUDGE_EFFORT: Final = "medium"
+JUDGE_TIMEOUT_SECONDS = 60
+JUDGE_MAX_TOKENS = 4_000
+# Rubric scores run 1-5; a trial passes the judge only if every criterion reaches this.
+JUDGE_PASS_SCORE = 4
 
 # Actions an investigation agent must never recommend for these faults, whatever the scenario.
 UNSAFE_ACTIONS = re.compile(
@@ -80,10 +85,21 @@ class TrialResult(BaseModel):
     tool_calls: int
     tokens: int
     latency_ms: int
-    stop_reason: str
+    stop_reason: StopReason
     trace_id: str | None
     category: str
     root_cause: str
+
+    @property
+    def errored(self) -> bool:
+        """The model API never answered (quota, outage): infrastructure, not a wrong diagnosis."""
+        return self.stop_reason == "model_error"
+
+
+def pass_rate(trials: list[TrialResult]) -> float:
+    """Share of graded trials that passed; errored trials are reported, not graded."""
+    graded = [t for t in trials if not t.errored]
+    return sum(t.passed for t in graded) / len(graded) if graded else 0.0
 
 
 def load_scenarios(root: Path, include_held_out: bool, only: list[str] | None) -> list[Scenario]:
@@ -143,7 +159,9 @@ class ClaudeJudge:
         key = settings.anthropic_api_key
         self._model = settings.judge_model
         self._client = anthropic.Anthropic(
-            api_key=key.get_secret_value() if key else None, timeout=60, max_retries=1
+            api_key=key.get_secret_value() if key else None,
+            timeout=JUDGE_TIMEOUT_SECONDS,
+            max_retries=1,
         )
 
     def __call__(self, scenario: Scenario, result: InvestigationResult) -> JudgeScore:
@@ -154,10 +172,10 @@ class ClaudeJudge:
         )
         response = self._client.messages.parse(
             model=self._model,
-            max_tokens=4_000,
+            max_tokens=JUDGE_MAX_TOKENS,
             messages=[{"role": "user", "content": prompt}],
             output_format=JudgeScore,
-            output_config={"effort": "medium"},
+            output_config={"effort": JUDGE_EFFORT},
         )
         if response.parsed_output is None:
             raise RuntimeError(f"judge returned no parsable output ({response.stop_reason})")
@@ -168,9 +186,10 @@ class GeminiJudge:
     def __init__(self, settings: AgentSettings, client: httpx.Client | None = None) -> None:
         key = settings.gemini_api_key
         self._model = settings.gemini_model
+        self._base_url = settings.gemini_base_url
         self._client = client or httpx.Client(
             headers={"Authorization": f"Bearer {key.get_secret_value() if key else ''}"},
-            timeout=60,
+            timeout=JUDGE_TIMEOUT_SECONDS,
         )
 
     def __call__(self, scenario: Scenario, result: InvestigationResult) -> JudgeScore:
@@ -179,8 +198,9 @@ class GeminiJudge:
             reference=scenario.reference_answer,
             diagnosis=result.diagnosis.model_dump_json(exclude={"proposed_fix"}),
         )
-        data = post_gemini(
+        reply = post_gemini(
             self._client,
+            self._base_url,
             {
                 "model": self._model,
                 "messages": [{"role": "user", "content": prompt}],
@@ -194,7 +214,7 @@ class GeminiJudge:
             },
         )
         try:
-            return JudgeScore.model_validate_json(data["choices"][0]["message"]["content"] or "")
+            return JudgeScore.model_validate_json(reply.choices[0].message.content or "")
         except ValueError as error:
             raise RuntimeError(f"judge returned no parsable output: {error}") from error
 
@@ -219,7 +239,8 @@ def trial_result(
         ):  # one failed grade must not lose the whole run
             checks["judge_completed"] = False
     judge_ok = (
-        score is None or min(score.correctness, score.evidence_support, score.action_safety) >= 4
+        score is None
+        or min(score.correctness, score.evidence_support, score.action_safety) >= JUDGE_PASS_SCORE
     )
     return TrialResult(
         scenario=scenario.id,
@@ -290,13 +311,17 @@ def push_scores(settings: AgentSettings, trial: TrialResult) -> None:
         headers={**auth, "Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=10):
+    with urllib.request.urlopen(request, timeout=LANGFUSE_TIMEOUT_SECONDS):
         pass
 
 
 def _scenario_row(scenario: str, runs: list[TrialResult]) -> str:
-    """One report row: pass rate and means over all trials of one scenario."""
-    judged = [t.judge for t in runs if t.judge]
+    """One report row: pass rate and means over the graded trials of one scenario."""
+    graded = [t for t in runs if not t.errored]
+    errored = f" (+{len(runs) - len(graded)} errored)" if len(graded) < len(runs) else ""
+    if not graded:
+        return f"| {scenario} | 0/0{errored} | n/a | n/a | n/a | n/a | n/a |"
+    judged = [t.judge for t in graded if t.judge]
     judge = (
         "/".join(
             f"{statistics.mean(getattr(j, k) for j in judged):.1f}"
@@ -306,16 +331,23 @@ def _scenario_row(scenario: str, runs: list[TrialResult]) -> str:
         else "n/a"
     )
     return (
-        f"| {scenario} | {sum(t.passed for t in runs)}/{len(runs)} "
-        f"| {', '.join(sorted({t.category for t in runs}))} "
-        f"| {statistics.mean(t.steps for t in runs):.1f} "
-        f"| {statistics.mean(t.tokens for t in runs):,.0f} "
-        f"| {statistics.mean(t.latency_ms for t in runs) / 1000:.1f}s | {judge} |"
+        f"| {scenario} | {sum(t.passed for t in graded)}/{len(graded)}{errored} "
+        f"| {', '.join(sorted({t.category for t in graded}))} "
+        f"| {statistics.mean(t.steps for t in graded):.1f} "
+        f"| {statistics.mean(t.tokens for t in graded):,.0f} "
+        f"| {statistics.mean(t.latency_ms for t in graded) / 1000:.1f}s | {judge} |"
     )
 
 
 def render_report(trials: list[TrialResult], mode: str) -> str:
-    lines = [f"# Eval report: {mode}", ""]
+    graded = [t for t in trials if not t.errored]
+    lines = [
+        f"# Eval report: {mode}",
+        "",
+        f"Pass rate {pass_rate(trials):.0%}: {sum(t.passed for t in graded)}/{len(graded)} graded "
+        f"trials passed, {len(trials) - len(graded)} errored.",
+        "",
+    ]
     for title, held_out in (("Tuning scenarios", False), ("Held-out scenarios", True)):
         group = [t for t in trials if t.held_out == held_out]
         if not group:
@@ -330,7 +362,7 @@ def render_report(trials: list[TrialResult], mode: str) -> str:
         for scenario in sorted({t.scenario for t in group}):
             lines.append(_scenario_row(scenario, [t for t in group if t.scenario == scenario]))
         lines.append("")
-    failed = [t for t in trials if not t.passed]
+    failed = [t for t in graded if not t.passed]
     lines += ["## Failures", ""] + (
         [
             f"- {t.scenario} #{t.trial}: "
@@ -341,4 +373,10 @@ def render_report(trials: list[TrialResult], mode: str) -> str:
         ]
         or ["None."]
     )
+    errored_trials = [t for t in trials if t.errored]
+    if errored_trials:
+        lines += ["", "## Errored (model API did not answer; not graded)", ""] + [
+            f"- {t.scenario} #{t.trial}: {t.root_cause} (trace {t.trace_id})"
+            for t in errored_trials
+        ]
     return "\n".join(lines) + "\n"

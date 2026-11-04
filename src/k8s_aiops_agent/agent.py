@@ -28,6 +28,7 @@ from k8s_aiops_agent.schemas import (
     RemediationOutcome,
     RemediationProposal,
     RunStats,
+    StopReason,
 )
 from k8s_aiops_agent.telemetry import current_trace_id, mark_error, observe, set_output
 from k8s_aiops_agent.tools import (
@@ -43,6 +44,12 @@ MAX_REPEATED_CALLS = 3
 MAX_REPAIRS = 1
 VERIFY_ATTEMPTS = 10
 VERIFY_INTERVAL_SECONDS = 3.0
+# Evidence the agent writes itself (verification, fallback) quotes this much tool output.
+EXCERPT_CHARS = 300
+MISSING_SELECTOR_FIX = (
+    "proposed_fix: a Service selector mismatch needs the corrected selector, so the operator "
+    "can approve the fix"
+)
 
 
 class AgentState(TypedDict, total=False):
@@ -57,8 +64,8 @@ class AgentState(TypedDict, total=False):
     repeated_calls: int
     repairs: int
     last_turn: dict[str, Any]
-    finalizing: str | None
-    stop_reason: str | None
+    finalizing: StopReason | None
+    stop_reason: StopReason | None
     diagnosis: dict[str, Any] | None
     proposal: dict[str, Any] | None
     remediation: dict[str, Any] | None
@@ -69,7 +76,7 @@ class Remediation:
     """Enables the approval-gated fix path. The approver decides; the agent never self-approves."""
 
     patcher: SelectorPatcher
-    approve: Callable[[RemediationProposal], bool]
+    approve: Callable[[RemediationProposal, Diagnosis], bool]
 
 
 class _InvestigationNodes:
@@ -127,12 +134,12 @@ class _InvestigationNodes:
         return "tools" if tool_uses else "nudge"
 
     def tools(self, state: AgentState) -> dict[str, Any]:
-        seen = {_call_key(r["name"], r["args"]): r["id"] for r in state.get("ledger", [])}
+        seen = {_tool_call_key(r["name"], r["args"]): r["id"] for r in state.get("ledger", [])}
         results: list[dict[str, Any]] = []
         records: list[dict[str, Any]] = []
         repeated = state.get("repeated_calls", 0)
         for call in _tool_uses(state):
-            key = _call_key(call["name"], call["input"])
+            key = _tool_call_key(call["name"], call["input"])
             if key in seen:
                 repeated += 1
                 text = f"Duplicate call: this was already answered as {seen[key]}; reuse it."
@@ -165,6 +172,10 @@ class _InvestigationNodes:
         submit = next(t for t in calls if t["name"] == SUBMIT_DIAGNOSIS)
         with observe("validate_diagnosis", "evaluator", input_value=submit["input"]) as span:
             diagnosis, problems = check_diagnosis(submit["input"], state.get("ledger", []))
+            if diagnosis is not None and self._selector_fix_missing_but_repairable(
+                diagnosis, state
+            ):
+                diagnosis, problems = None, [MISSING_SELECTOR_FIX]
             set_output(span, problems or "valid")
         if diagnosis is not None:
             return {
@@ -185,6 +196,16 @@ class _InvestigationNodes:
             "repairs": state.get("repairs", 0) + 1,
         }
 
+    def _selector_fix_missing_but_repairable(self, diagnosis: Diagnosis, state: AgentState) -> bool:
+        """Ask once for the corrected selector; never trade a valid diagnosis for it."""
+        return (
+            self._can_remediate
+            and diagnosis.category is FaultCategory.SERVICE_SELECTOR_MISMATCH
+            and diagnosis.proposed_fix is None
+            and not state.get("finalizing")
+            and state.get("repairs", 0) < MAX_REPAIRS
+        )
+
     def route_after_validate(
         self, state: AgentState
     ) -> Literal["agent", "fallback", "propose", "__end__"]:
@@ -194,7 +215,7 @@ class _InvestigationNodes:
                 return "fallback"
             return "agent"
         is_selector_fault = diagnosis["category"] == FaultCategory.SERVICE_SELECTOR_MISMATCH
-        if self._can_remediate and diagnosis.get("proposed_fix") and is_selector_fault:
+        if self._can_remediate and is_selector_fault:
             return "propose"
         return "__end__"
 
@@ -233,13 +254,19 @@ class _RemediationNodes:
 
     def propose(self, state: AgentState) -> dict[str, Any]:
         fix = Diagnosis.model_validate(state["diagnosis"]).proposed_fix
-        if fix is None:  # routing only sends diagnoses with a proposed fix here
-            raise RuntimeError("propose reached without a proposed fix")
+        if fix is None:
+            return _remediation_outcome(
+                approved=False,
+                applied=False,
+                message="No fix proposed: the diagnosis did not include the corrected selector.",
+            )
         with observe("remediation.propose", "span", input_value=fix) as span:
             proposal = build_proposal(self._kube, state["namespace"], fix)
             set_output(span, proposal if isinstance(proposal, str) else proposal.model_dump())
         if isinstance(proposal, str):
-            return _outcome(approved=False, applied=False, message=f"No fix proposed: {proposal}")
+            return _remediation_outcome(
+                approved=False, applied=False, message=f"No fix proposed: {proposal}"
+            )
         return {"proposal": proposal.model_dump(mode="json")}
 
     def route_after_propose(self, state: AgentState) -> Literal["approve", "__end__"]:
@@ -252,7 +279,9 @@ class _RemediationNodes:
             set_output(span, {"approved": approved})
         if approved:
             return Command(goto="apply")
-        declined = _outcome(approved=False, applied=False, message="Fix declined by the operator.")
+        declined = _remediation_outcome(
+            approved=False, applied=False, message="Fix declined by the operator."
+        )
         return Command(goto="__end__", update=declined)
 
     def apply(self, state: AgentState) -> dict[str, Any]:
@@ -267,7 +296,9 @@ class _RemediationNodes:
                 )
             except KubeError as error:
                 mark_error(span, str(error))
-                return _outcome(approved=True, applied=False, message=f"Patch failed: {error}")
+                return _remediation_outcome(
+                    approved=True, applied=False, message=f"Patch failed: {error}"
+                )
         return {}
 
     def route_after_apply(self, state: AgentState) -> Literal["verify", "__end__"]:
@@ -284,7 +315,7 @@ class _RemediationNodes:
         evidence = Evidence(
             claim="Fresh read of the Service and its endpoints after the patch.",
             tool_call_id=last.id,
-            excerpt=(last.error or last.output)[:300],
+            excerpt=(last.error or last.output)[:EXCERPT_CHARS],
         )
         message = (
             f"Resolved: {proposal.service} now has ready endpoints for "
@@ -294,7 +325,7 @@ class _RemediationNodes:
         )
         return {
             "ledger": [r.to_dict() for r in records],
-            **_outcome(
+            **_remediation_outcome(
                 approved=True,
                 applied=True,
                 resolved=resolved,
@@ -387,7 +418,8 @@ def investigate(
         )
         while state.get("__interrupt__") and remediation is not None:
             proposal = RemediationProposal.model_validate(state["__interrupt__"][0].value)
-            state = graph.invoke(Command(resume=remediation.approve(proposal)), config)
+            diagnosis = Diagnosis.model_validate(state["diagnosis"])
+            state = graph.invoke(Command(resume=remediation.approve(proposal, diagnosis)), config)
         latency_ms = int((time.monotonic() - started) * 1000)
         result = _result_from_state(question, state, latency_ms, trace_id)
         set_output(span, result.diagnosis.model_dump(mode="json"))
@@ -419,7 +451,9 @@ def _result_from_state(
     )
 
 
-def _outcome(*, approved: bool, applied: bool, message: str, **extra: Any) -> dict[str, Any]:
+def _remediation_outcome(
+    *, approved: bool, applied: bool, message: str, **extra: Any
+) -> dict[str, Any]:
     outcome = RemediationOutcome(
         approved=approved,
         applied=applied,
@@ -455,12 +489,12 @@ def check_diagnosis(
     return (None, problems) if problems else (diagnosis, [])
 
 
-def fallback_diagnosis(reason: str, ledger: list[dict[str, Any]]) -> Diagnosis:
+def fallback_diagnosis(reason: StopReason, ledger: list[dict[str, Any]]) -> Diagnosis:
     evidence = [
         Evidence(
             claim="Last observation before the investigation stopped.",
             tool_call_id=last["id"],
-            excerpt=(last["error"] or last["output"])[:200],
+            excerpt=(last["error"] or last["output"])[:EXCERPT_CHARS],
         )
         for last in ledger[-1:]
     ]
@@ -490,11 +524,11 @@ def _tool_result(tool_use_id: str, text: str, is_error: bool = False) -> dict[st
     }
 
 
-def _call_key(name: str, args: dict[str, Any]) -> str:
+def _tool_call_key(name: str, args: dict[str, Any]) -> str:
     return f"{name}:{json.dumps(args, sort_keys=True)}"
 
 
-def _budget_exceeded(state: AgentState, settings: AgentSettings) -> str | None:
+def _budget_exceeded(state: AgentState, settings: AgentSettings) -> StopReason | None:
     if state.get("steps", 0) >= settings.max_steps:
         return "max_steps"
     if state.get("input_tokens", 0) + state.get("output_tokens", 0) >= settings.max_total_tokens:

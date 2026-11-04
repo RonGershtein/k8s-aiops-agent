@@ -5,34 +5,109 @@ every claim with evidence from the tool call that produced it, and recommends th
 action. For one fault (a Service selector mismatch) it can also apply the fix after explicit human
 approval, then verifies the result with fresh evidence.
 
-Example run (abridged):
+## Quick start
+
+You need **Docker**, **kind**, **kubectl** and **make**. Everything else runs in containers.
+
+**1. Set up** (cluster, permissions, all six scenarios, `.env`, agent image; a few minutes the
+first time, seconds after that):
+
+```bash
+git clone https://github.com/RonGershtein/k8s-aiops-agent.git
+cd k8s-aiops-agent
+make up
+```
+
+**2. Add a model API key** to `.env` (`make up` created it):
+
+```bash
+AGENT_LLM_PROVIDER=gemini
+GEMINI_API_KEY=your-key        # free: https://aistudio.google.com/api-keys
+```
+
+Or use Claude: `AGENT_LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY=your-key`.
+
+**3. Wait about 60 seconds** for the faults to show (crash loops, failing probes, events).
+
+**4. Run it:**
+
+```bash
+make run S=01        # investigate a scenario: S=00 to S=05 (table below)
+make fix             # scenario 03: shows the investigation, the diagnosis and the proposed fix,
+                     # asks "Apply this change? [y/N]", patches on y, then verifies it worked
+make scenario-up S=03   # reset scenario 03 after a fix, to try again
+```
+
+| `S=` | Scenario | What is broken |
+|---|---|---|
+| 00 | healthy | nothing: the agent must say no fault |
+| 01 | crashloop-bad-config | a ConfigMap value crashes the app |
+| 02 | readiness-wrong-port | the readiness probe checks the wrong port |
+| 03 | service-selector-mismatch | the Service selects no pods (the one fix the agent can apply) |
+| 04 | image-pull-error | a misspelled image tag |
+| 05 | missing-configmap | the Deployment references a ConfigMap that does not exist |
+
+Ask your own question with `Q`: `make run S=02 Q="Why does catalog return no data?"`.
+
+**No API key?** `docker compose run --rm agent eval --llm scripted` runs every scenario offline
+against recorded snapshots and prints the eval report.
+
+**Clean up:** `make cluster-down`.
+
+A real run (Gemini 3.5 Flash-Lite on the recorded scenario 01 snapshot; long lines unwrapped and
+the panel's box borders removed, otherwise verbatim):
 
 ```
-$ aiops investigate "Why is the checkout service unhealthy?" -n scenario-01
+$ aiops investigate "Why is the checkout service unhealthy?" -n scenario-01 --llm gemini
 
-trace 7c1f…
-└── investigate 9.8s
-    ├── model.call 2.1s 6120+410 tok
-    ├── tool.list_pods t1 {"namespace": "scenario-01"}
-    ├── tool.list_deployments t2 {"namespace": "scenario-01"}
-    ├── model.call …
-    ├── tool.get_pod_logs t3 {"namespace": "scenario-01", "name": "checkout-…", "previous": true}
-    ├── tool.get_configmap t5 {"namespace": "scenario-01", "name": "checkout-config"}
-    └── validate_diagnosis
-╭─ Diagnosis ─────────────────────────────────────────────────────────────────╮
-│ bad_configuration (confidence 95%)                                          │
-│ Root cause: ConfigMap checkout-config sets PAYMENT_TIMEOUT_MS to "30s", but │
-│ checkout expects integer milliseconds, so it exits and crash loops.         │
-│ Evidence                                                                    │
-│   [t1] pod is crash looping          “CrashLoopBackOff”                     │
-│   [t3] exits on config parse error   “FATAL config: PAYMENT_TIMEOUT_MS=…”   │
-│   [t5] value comes from ConfigMap    “"PAYMENT_TIMEOUT_MS": "30s"”          │
-│ Recommended action (risk: low): set it to "30000", then rollout restart.    │
-╰─────────────────────────────────────────────────────────────────────────────╯
+trace 239a9da9ddcb915837202a75a219b7c5
+└── investigate 4427ms
+    ├── model.call 924ms 1962+58 tok
+    ├── tool.list_pods 0ms t1 {"namespace": "scenario-01"}
+    ├── tool.list_deployments 0ms t2 {"namespace": "scenario-01"}
+    ├── tool.list_services 0ms t3 {"namespace": "scenario-01"}
+    ├── model.call 1229ms 2249+116 tok
+    ├── tool.describe_pod 1ms t4 {"namespace": "scenario-01", "name": "checkout-5787576987-r846n"}
+    ├── tool.get_pod_logs 0ms t5 {"previous": true, "name": "checkout-5787576987-r846n", "namespace": "scenario-01", "tail_lines": 50}
+    ├── tool.get_events 1ms t6 {"namespace": "scenario-01"}
+    ├── model.call 783ms 5415+28 tok
+    ├── tool.get_configmap 0ms t7 {"namespace": "scenario-01", "name": "checkout-config"}
+    ├── model.call 1473ms 5520+341 tok
+    └── validate_diagnosis 0ms
+
+Diagnosis: Why is the checkout service unhealthy?
+bad_configuration (confidence 100%)
+
+Root cause
+  The checkout service configuration (ConfigMap 'checkout-config') specifies PAYMENT_TIMEOUT_MS as
+  '30s', but the application expects an integer number of milliseconds, causing it to fail
+  validation and exit immediately with a fatal error.
+
+Evidence
+  [t1] The checkout pod is in a CrashLoopBackOff state due to an invalid configuration value.
+      “"waiting_reasons": ["CrashLoopBackOff"]”
+  [t5] The checkout container exits with a configuration error regarding PAYMENT_TIMEOUT_MS.
+      “FATAL config: PAYMENT_TIMEOUT_MS="30s" is not a valid integer number of milliseconds”
+  [t7] The ConfigMap checkout-config specifies PAYMENT_TIMEOUT_MS as a duration string ("30s")
+       instead of an integer number of milliseconds.
+      “"PAYMENT_TIMEOUT_MS": "30s"”
+
+Recommended action (risk: low)
+  Update the ConfigMap 'checkout-config' so that PAYMENT_TIMEOUT_MS is set to a valid integer
+  value representing milliseconds (e.g., '30000' instead of '30s').
+
+stop=diagnosis_submitted steps=4 tool_calls=7 tokens=15146+543 latency=4427ms
 ```
+
+**Results:** with a real model (Gemini 3.5 Flash-Lite, 3 trials per scenario, LLM judge),
+16 of 17 graded trials pass (94%), including 6/6 on the two held-out scenarios. One more trial
+errored on a free-tier quota limit and is reported separately. See the
+[Gemini eval report](evals/results/fixture-gemini.md) and [evaluation strategy](#evaluation-strategy).
+
 
 ## Contents
 
+- [Quick start](#quick-start)
 - [Setup](#setup)
 - [Run the agent](#run-the-agent)
 - [Reproduce the failure scenarios](#reproduce-the-failure-scenarios)
@@ -46,16 +121,23 @@ trace 7c1f…
 
 ## Setup
 
-Requirements: **Docker**, **kind** and **kubectl**. Everything else runs in containers. For local
+Requirements: **Docker**, **kind**, **kubectl** and **make**. Everything else runs in containers. For local
 development without Docker you also need [uv](https://docs.astral.sh/uv/).
 
 ```bash
-make cluster-up          # kind cluster "aiops" + least-privilege agent RBAC + agent kubeconfigs
-cp .env.example .env     # then set ANTHROPIC_API_KEY and AGENT_LLM_PROVIDER=anthropic
-                         # (or GEMINI_API_KEY and AGENT_LLM_PROVIDER=gemini: free tier in Google AI Studio)
+make up
 ```
 
-`make cluster-up` is idempotent. The agent never uses your admin kubeconfig: it gets two
+That one command creates the kind cluster `aiops` with least-privilege agent RBAC and agent
+kubeconfigs, starts all six scenarios, creates `.env` from `.env.example` if you have none, and
+builds the agent image. The first run takes a few minutes (kind pulls its node image and the
+image builds); after that it takes seconds. For a real model,
+set `GEMINI_API_KEY` (free tier in Google AI Studio) or `ANTHROPIC_API_KEY` in `.env`, with the
+matching `AGENT_LLM_PROVIDER`. The steps are also separate targets: `make cluster-up`,
+`make scenarios-up` (or one with `make scenario-up S=01`) and `make cluster-down`. Then run
+the agent with `make run` (see below).
+
+`make up` and `make cluster-up` are idempotent. The agent never uses your admin kubeconfig: it gets two
 ServiceAccount kubeconfigs in `.kube/` (mode 0600, gitignored). Their tokens last 24h; rerun
 `make cluster-up` to refresh them. kind clusters do not survive a Docker/WSL restart; rerun it
 then too.
@@ -66,10 +148,28 @@ key the agent runs with `AGENT_LLM_PROVIDER=scripted`, an offline test double (s
 
 ## Run the agent
 
+**A real run needs a model API key.** Put one in `.env` (created by `make up`):
+
+```bash
+AGENT_LLM_PROVIDER=gemini
+GEMINI_API_KEY=...        # free tier: https://aistudio.google.com/api-keys
+# or: AGENT_LLM_PROVIDER=anthropic and ANTHROPIC_API_KEY=...
+```
+
+Without a key, the evals still run offline with the scripted test double (see
+[Run the evaluations](#run-the-evaluations)).
+
 In a container (only Docker needed):
 
 ```bash
-docker compose build agent
+make run                                                # scenario 01, a generic question
+make run S=03 Q="Requests to frontend time out. Why?"   # any scenario, your own question
+make fix                                                # scenario 03 with the approval-gated fix
+```
+
+`make run` is short for:
+
+```bash
 docker compose run --rm agent investigate "Why is the checkout service unhealthy?" \
   -n scenario-01 --backend live
 ```
@@ -105,7 +205,8 @@ Each scenario is a directory in `scenarios/` with `manifests.yaml` (what to appl
 snapshot of the namespace).
 
 ```bash
-make scenario-up S=01     # apply one scenario (00-05); wait ~60s for restarts and events
+make scenarios-up         # apply all scenarios (make up already did); wait ~60s for restarts and events
+make scenario-up S=01     # apply one scenario (00-05)
 make scenarios-down       # remove all scenario workloads
 make fixtures             # re-record every fixture.json from the live cluster
 ```
@@ -133,10 +234,24 @@ make eval EVAL_ARGS="--llm anthropic --backend live --trials 1"              # f
 docker compose run --rm agent eval --llm anthropic --trials 3 --judge         # same, in Docker
 ```
 
+A quick real-model check: `uv run pytest -m llm` runs scenario 01 through the real Gemini API and
+asserts every eval check passes (correct, grounded, safe). It reads `GEMINI_API_KEY` from the shell
+or `.env`, skips without it, and is excluded from the default `pytest` run so it never spends quota
+by accident.
+
 Reports are written to `evals/results/<backend>-<llm>.md` (and `.json`), separating tuning and
-held-out scenarios. The committed report is the [offline gate](evals/results/fixture-scripted.md).
-The Claude report (3 trials plus the judge) comes from the second command above or from the manual
-`real-llm-eval` CI job, which uploads it as the `eval-claude` artifact.
+held-out scenarios. Two reports are committed:
+
+- [Gemini 3.5 Flash-Lite](evals/results/fixture-gemini.md): the real-model result (3 trials plus
+  the judge). It was run on the free tier because no Anthropic key was available while building;
+  the design targets Claude, and the same command with `--llm anthropic` (or the manual
+  `real-llm-eval` CI job) produces the Claude report.
+- [Offline gate](evals/results/fixture-scripted.md): the scripted test double that CI runs.
+
+A trial whose model call never got an answer (`stop_reason=model_error`, for example a quota
+limit) is reported as **errored**: listed, but left out of the pass rate, because it says nothing
+about the diagnosis. Wrong answers always count as failures. If every trial errored, the pass rate
+is 0, so an outage cannot pass the gate.
 
 ### Evaluation strategy
 
@@ -191,14 +306,18 @@ works.
 ## Remediation with approval
 
 ```bash
-uv run aiops investigate "Requests to frontend time out. Why?" -n scenario-03 --backend live --allow-remediation
+make fix                 # answer y at "Apply this change? [y/N]"
+make scenario-up S=03    # break it again afterwards
 ```
 
-When the diagnosis is a Service selector mismatch and carries a proposed selector, the graph:
+`make fix` runs the agent on scenario 03 with `--allow-remediation` (the full command is in the
+`Makefile`). When the diagnosis is a Service selector mismatch, the graph:
 
 1. **Proposes:** re-reads the Service and pods, and refuses to propose unless the new selector
    matches at least one Ready pod and differs from the current one. It then shows the current
-   selector, the proposed selector, the pods it will route to, and the expected effect.
+   selector, the proposed selector, the pods it will route to, and the expected effect. If the
+   diagnosis leaves out the corrected selector, the model is asked for it once; if it is still
+   missing, the run says "No fix proposed" and why, instead of ending silently.
 2. **Pauses for approval:** LangGraph `interrupt()`. Nothing changes unless a human types `y`, and
    the default is no.
 3. **Applies through one narrow tool:** a JSON patch that first `test`s that `spec.selector` is
@@ -306,7 +425,7 @@ is a hard backstop below that.
 ### Evaluation approach
 
 See [evaluation strategy](#evaluation-strategy): deterministic correctness, grounding, trajectory,
-action-safety and budget checks on every run, plus a Claude judge against a reference answer,
+action-safety and budget checks on every run, plus an LLM judge (Claude or Gemini) against a reference answer,
 multiple trials, and held-out scenarios reported separately.
 
 ### Safety boundary

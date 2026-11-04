@@ -23,6 +23,8 @@ from k8s_aiops_agent.config import AgentSettings
 
 TRACER_NAME = "k8s_aiops_agent"
 MAX_ATTRIBUTE_CHARS = 8_000
+# Langfuse is optional: a slow or absent server must not stall a run for long.
+LANGFUSE_TIMEOUT_SECONDS = 5
 
 _provider: TracerProvider | None = None
 
@@ -74,7 +76,7 @@ def setup_tracing(settings: AgentSettings) -> TracerProvider:
         exporter = OTLPSpanExporter(
             endpoint=f"{settings.langfuse_host.rstrip('/')}/api/public/otel/v1/traces",
             headers=auth,
-            timeout=5,
+            timeout=LANGFUSE_TIMEOUT_SECONDS,
         )
         provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
@@ -84,7 +86,7 @@ def setup_tracing(settings: AgentSettings) -> TracerProvider:
 
 def shutdown_tracing() -> None:
     if _provider is not None:
-        _provider.force_flush(timeout_millis=5_000)
+        _provider.force_flush(timeout_millis=LANGFUSE_TIMEOUT_SECONDS * 1000)
 
 
 @contextmanager

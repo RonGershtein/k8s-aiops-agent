@@ -15,9 +15,7 @@ def first_pod(kube: FixtureKube, namespace: str) -> str:
 
 
 @pytest.mark.parametrize("fixture_file", RECORDED, ids=lambda p: p.parent.name)
-def test_record_namespace_from_replay_reproduces_the_recording(
-    kube: FixtureKube, fixture_file: Path
-) -> None:
+def test_record_from_replay_reproduces_recording(kube: FixtureKube, fixture_file: Path) -> None:
     original = json.loads(fixture_file.read_text())
 
     rerecorded = record_namespace(kube, original["namespace"])
@@ -41,7 +39,7 @@ def test_fixture_kube_unknown_namespace_looks_empty(kube: FixtureKube) -> None:
     assert kube.list_pods("team-x") == []
 
 
-def test_fixture_kube_events_filtered_by_involved_object_only_returns_that_object(
+def test_fixture_events_filter_by_object(
     kube: FixtureKube,
 ) -> None:
     pod = first_pod(kube, "scenario-02")
@@ -54,13 +52,14 @@ def test_fixture_kube_events_filtered_by_involved_object_only_returns_that_objec
 
 def test_fixture_kube_logs_respect_tail_lines(kube: FixtureKube) -> None:
     pod = first_pod(kube, "scenario-00")
+    tail_lines = 3
 
-    logs = kube.get_pod_logs("scenario-00", pod, tail_lines=3)
+    logs = kube.get_pod_logs("scenario-00", pod, tail_lines=tail_lines)
 
-    assert len(logs.splitlines()) == 3
+    assert len(logs.splitlines()) == tail_lines
 
 
-def test_fixture_kube_crashloop_logs_contain_the_config_error(kube: FixtureKube) -> None:
+def test_fixture_crashloop_logs_show_config_error(kube: FixtureKube) -> None:
     pod = first_pod(kube, "scenario-01")
 
     logs = kube.get_pod_logs("scenario-01", pod, previous=True)

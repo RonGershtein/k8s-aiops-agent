@@ -8,11 +8,12 @@ import httpx
 from kubernetes.client.exceptions import ApiException
 
 from k8s_aiops_agent.config import AgentSettings
+from k8s_aiops_agent.evals import load_scenarios
 from k8s_aiops_agent.llm import ScriptedModel
 
 SCENARIOS_DIR = Path("scenarios")
 SCRIPTS_DIR = Path("evals/scripted")
-SCENARIO_NAMESPACES = [f"scenario-0{n}" for n in range(6)]
+SCENARIO_NAMESPACES = [s.namespace for s in load_scenarios(SCENARIOS_DIR, True, None)]
 
 
 def make_settings(**overrides: Any) -> AgentSettings:

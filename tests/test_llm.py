@@ -7,7 +7,14 @@ import httpx
 import pytest
 
 from k8s_aiops_agent import llm
-from k8s_aiops_agent.llm import FALLBACK_BETA, AnthropicModel, GeminiModel, ModelError
+from k8s_aiops_agent.llm import (
+    FALLBACK_BETA,
+    GEMINI_RATE_LIMIT_RETRIES,
+    AnthropicModel,
+    GeminiModel,
+    ModelError,
+    build_model,
+)
 from tests.builders import gemini_settings, make_settings, mock_http, tool_call
 
 
@@ -36,7 +43,7 @@ def api_response(content: list[dict[str, Any]], **usage: int) -> MagicMock:
     return response
 
 
-def test_anthropic_model_counts_cached_input_and_returns_blocks_unchanged(
+def test_anthropic_turn_keeps_blocks_and_counts_cache(
     claude: MagicMock, model: AnthropicModel
 ) -> None:
     blocks = [{"type": "thinking", "thinking": "", "signature": "s"}, tool_call("list_pods")]
@@ -52,7 +59,7 @@ def test_anthropic_model_counts_cached_input_and_returns_blocks_unchanged(
     assert turn.stop_reason == "tool_use"
 
 
-def test_anthropic_model_requests_effort_caching_and_fallback_without_forcing_tools(
+def test_anthropic_request_sets_effort_cache_and_fallback(
     claude: MagicMock, model: AnthropicModel
 ) -> None:
     claude.beta.messages.create.return_value = api_response([])
@@ -116,7 +123,7 @@ def test_gemini_model_maps_tool_calls_to_anthropic_blocks() -> None:
     assert (turn.stop_reason, turn.input_tokens, turn.output_tokens) == ("tool_use", 7, 3)
 
 
-def test_gemini_model_sends_history_as_openai_messages_with_inlined_schemas() -> None:
+def test_gemini_request_uses_openai_format() -> None:
     client, sent = mock_http(httpx.Response(200, json=GEMINI_TOOL_CALL))
     model = GeminiModel(gemini_settings(), client)
     call = {**tool_call("list_pods", namespace="ns"), "id": "c1"}
@@ -152,15 +159,40 @@ def test_gemini_model_sends_history_as_openai_messages_with_inlined_schemas() ->
     }
 
 
-def test_gemini_model_retries_rate_limits_then_raises_model_error(
+def test_gemini_rate_limit_retries_then_raises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(llm.time, "sleep", lambda seconds: None)
-    rate_limited = httpx.Response(429, text="quota")
-    client, sent = mock_http(rate_limited, rate_limited, rate_limited, rate_limited)
+    attempts = GEMINI_RATE_LIMIT_RETRIES + 1
+    client, sent = mock_http(*[httpx.Response(429, text="quota")] * attempts)
     model = GeminiModel(gemini_settings(), client)
 
     with pytest.raises(ModelError, match="429"):
         model.create("system", [], [])
 
-    assert len(sent) == 4
+    assert len(sent) == attempts
+
+
+def test_gemini_malformed_reply_raises_model_error() -> None:
+    client, _ = mock_http(httpx.Response(200, json={"unexpected": True}))
+    model = GeminiModel(gemini_settings(), client)
+
+    with pytest.raises(ModelError, match="unexpected response"):
+        model.create("system", [], [])
+
+
+def test_gemini_invalid_tool_arguments_raise_model_error() -> None:
+    reply = json.loads(json.dumps(GEMINI_TOOL_CALL))
+    reply["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"] = "{not json"
+    client, _ = mock_http(httpx.Response(200, json=reply))
+    model = GeminiModel(gemini_settings(), client)
+
+    with pytest.raises(ModelError, match="invalid tool arguments"):
+        model.create("system", [], [])
+
+
+def test_build_model_without_api_or_script_explains_the_key() -> None:
+    settings = make_settings()
+
+    with pytest.raises(ValueError, match="GEMINI_API_KEY"):
+        build_model(settings)

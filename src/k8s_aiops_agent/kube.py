@@ -12,6 +12,7 @@ Json = dict[str, Any]
 
 REQUEST_TIMEOUT_SECONDS = 10
 MAX_EVENTS = 30
+DEFAULT_LOG_LINES = 100
 _LOGS_GONE = "unable to retrieve container logs"
 PREVIOUS_LOGS_UNAVAILABLE = "[previous container logs unavailable; showing current container]\n"
 
@@ -34,7 +35,7 @@ class KubeGateway(Protocol):
         name: str,
         container: str | None = None,
         previous: bool = False,
-        tail_lines: int = 100,
+        tail_lines: int = DEFAULT_LOG_LINES,
     ) -> str: ...
     def get_events(self, namespace: str, involved_object: str | None = None) -> list[Json]: ...
     def get_deployment(self, namespace: str, name: str) -> Json: ...
@@ -94,23 +95,23 @@ class LiveKube:
         name: str,
         container: str | None = None,
         previous: bool = False,
-        tail_lines: int = 100,
+        tail_lines: int = DEFAULT_LOG_LINES,
     ) -> str:
-        def read(prev: bool) -> str:
+        def read_logs(previous: bool) -> str:
             logs: str = call_api(
                 self._core.read_namespaced_pod_log,
                 name,
                 namespace,
                 container=container,
-                previous=prev,
+                previous=previous,
                 tail_lines=tail_lines,
             )
             return logs
 
         if not previous:
-            return read(False)
+            return read_logs(previous=False)
         try:
-            logs = read(True)
+            logs = read_logs(previous=True)
             # The kubelet sometimes answers 200 with this message instead of an error status.
             if not logs.startswith(_LOGS_GONE):
                 return logs
@@ -119,7 +120,7 @@ class LiveKube:
             # (already exited) container still holds the crash output.
             if error.status in (403, 404):
                 raise
-        return PREVIOUS_LOGS_UNAVAILABLE + read(False)
+        return PREVIOUS_LOGS_UNAVAILABLE + read_logs(previous=False)
 
     def get_events(self, namespace: str, involved_object: str | None = None) -> list[Json]:
         selector = f"involvedObject.name={involved_object}" if involved_object else None
