@@ -4,7 +4,6 @@ Deterministic checks answer "is it correct, grounded, safe and within budget" wi
 the judge adds a rubric score against the scenario's reference answer.
 """
 
-import base64
 import json
 import logging
 import re
@@ -24,6 +23,7 @@ from k8s_aiops_agent.guards import normalize_text
 from k8s_aiops_agent.kube import KubeGateway
 from k8s_aiops_agent.llm import ChatModel
 from k8s_aiops_agent.schemas import InvestigationResult
+from k8s_aiops_agent.telemetry import langfuse_auth_header
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +141,9 @@ class ClaudeJudge:
     def __init__(self, settings: AgentSettings) -> None:
         key = settings.anthropic_api_key
         self._model = settings.judge_model
-        self._client = anthropic.Anthropic(api_key=key.get_secret_value() if key else None)
+        self._client = anthropic.Anthropic(
+            api_key=key.get_secret_value() if key else None, timeout=60, max_retries=1
+        )
 
     def __call__(self, scenario: Scenario, result: InvestigationResult) -> JudgeScore:
         prompt = JUDGE_PROMPT.format(
@@ -224,7 +226,8 @@ def run_evals(
 
 def push_scores(settings: AgentSettings, trial: TrialResult) -> None:
     """Attach eval results to the run's trace in Langfuse, so a score links to its execution."""
-    if not (trial.trace_id and settings.langfuse_public_key and settings.langfuse_secret_key):
+    auth = langfuse_auth_header(settings)
+    if not (trial.trace_id and auth):
         return
     scores: list[dict[str, Any]] = [
         {"traceId": trial.trace_id, "name": name, "value": int(ok), "dataType": "BOOLEAN"}
@@ -241,14 +244,10 @@ def push_scores(settings: AgentSettings, trial: TrialResult) -> None:
                     "comment": trial.judge.rationale,
                 }
             )
-    token = f"{settings.langfuse_public_key}:{settings.langfuse_secret_key.get_secret_value()}"
     request = urllib.request.Request(
         f"{settings.langfuse_host.rstrip('/')}/api/public/scores",
         data=json.dumps(scores).encode(),
-        headers={
-            "Authorization": f"Basic {base64.b64encode(token.encode()).decode()}",
-            "Content-Type": "application/json",
-        },
+        headers={**auth, "Content-Type": "application/json"},
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=10):

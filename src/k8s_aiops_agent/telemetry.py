@@ -55,17 +55,25 @@ class JsonlSpanExporter(SpanExporter):
         return SpanExportResult.SUCCESS
 
 
+def langfuse_auth_header(settings: AgentSettings) -> dict[str, str]:
+    """Basic auth for the Langfuse API; empty when the keys are not configured."""
+    if not (settings.langfuse_public_key and settings.langfuse_secret_key):
+        return {}
+    token = f"{settings.langfuse_public_key}:{settings.langfuse_secret_key.get_secret_value()}"
+    return {"Authorization": f"Basic {base64.b64encode(token.encode()).decode()}"}
+
+
 def setup_tracing(settings: AgentSettings) -> TracerProvider:
     global _provider
     if _provider is not None:
         return _provider
     provider = TracerProvider(resource=Resource.create({"service.name": "k8s-aiops-agent"}))
     provider.add_span_processor(SimpleSpanProcessor(JsonlSpanExporter(settings.trace_dir)))
-    if settings.langfuse_public_key and settings.langfuse_secret_key:
-        token = f"{settings.langfuse_public_key}:{settings.langfuse_secret_key.get_secret_value()}"
+    auth = langfuse_auth_header(settings)
+    if auth:
         exporter = OTLPSpanExporter(
             endpoint=f"{settings.langfuse_host.rstrip('/')}/api/public/otel/v1/traces",
-            headers={"Authorization": f"Basic {base64.b64encode(token.encode()).decode()}"},
+            headers=auth,
             timeout=5,
         )
         provider.add_span_processor(BatchSpanProcessor(exporter))

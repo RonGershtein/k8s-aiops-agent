@@ -41,7 +41,9 @@ class AnthropicModel:
         self._settings = settings
         self._client = anthropic.Anthropic(
             api_key=key.get_secret_value() if key else None,
-            timeout=settings.timeout_seconds,
+            # With one retry, a stalled call still ends inside the run's own timeout.
+            timeout=settings.timeout_seconds / 2,
+            max_retries=1,
             open_telemetry=False,  # the agent emits its own generation spans for every model call
         )
 
