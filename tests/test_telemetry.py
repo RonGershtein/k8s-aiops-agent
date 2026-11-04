@@ -40,9 +40,7 @@ def summarize_trace(trace_file: Path) -> dict[str, Any]:
     }
 
 
-def test_investigation_trace_links_request_model_calls_and_tools(
-    trace_dir: Path, kube: FixtureKube
-) -> None:
+def test_trace_links_request_model_and_tools(trace_dir: Path, kube: FixtureKube) -> None:
     model = scripted_model("01-crashloop-bad-config")
 
     result = investigate("q", "scenario-01", make_settings(), kube, model)

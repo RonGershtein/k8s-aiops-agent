@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from k8s_aiops_agent import agent as agent_module
-from k8s_aiops_agent.agent import Remediation, check_diagnosis, investigate
+from k8s_aiops_agent.agent import MAX_REPEATED_CALLS, Remediation, check_diagnosis, investigate
 from k8s_aiops_agent.fixture_kube import FixtureKube
 from k8s_aiops_agent.kube import KubeError
 from k8s_aiops_agent.llm import ModelError, ScriptedModel
@@ -30,7 +30,7 @@ GOOD_EVIDENCE = [{"claim": "crash loop", "tool_call_id": "t1", "excerpt": "Crash
 LIST_PODS = tool_call("list_pods", namespace="scenario-01")
 
 
-def test_investigate_scripted_crashloop_returns_grounded_diagnosis(kube: FixtureKube) -> None:
+def test_investigate_crashloop_is_grounded(kube: FixtureKube) -> None:
     model = scripted_model("01-crashloop-bad-config")
 
     result = investigate("Why is checkout unhealthy?", "scenario-01", make_settings(), kube, model)
@@ -40,18 +40,21 @@ def test_investigate_scripted_crashloop_returns_grounded_diagnosis(kube: Fixture
     assert result.diagnosis.cited_tool_call_ids() <= {r["id"] for r in result.ledger}
 
 
-def test_investigate_model_that_never_submits_stops_at_max_steps_inconclusive(
+def test_investigate_never_submitting_stops_at_max_steps(
     kube: FixtureKube,
 ) -> None:
     turns = [
         [tool_call("get_pod_logs", namespace="scenario-01", name="p", tail_lines=n)]
         for n in range(1, 20)
     ]
+    max_steps = 3
 
-    result = investigate("q", "scenario-01", make_settings(max_steps=3), kube, ScriptedModel(turns))
+    result = investigate(
+        "q", "scenario-01", make_settings(max_steps=max_steps), kube, ScriptedModel(turns)
+    )
 
     assert result.stats.stop_reason == "max_steps"
-    assert result.stats.steps == 4  # the budget plus one finalize turn
+    assert result.stats.steps == max_steps + 1  # the budget plus one finalize turn
     assert result.diagnosis.category is FaultCategory.INCONCLUSIVE
     assert result.diagnosis.confidence == 0.0
 
@@ -69,8 +72,8 @@ def test_investigate_after_budget_accepts_a_final_diagnosis(kube: FixtureKube) -
     assert result.diagnosis.category is FaultCategory.CRASH_LOOP
 
 
-def test_investigate_repeating_the_same_call_stops_for_repeated_calls(kube: FixtureKube) -> None:
-    turns = [[LIST_PODS]] * 10
+def test_investigate_repeated_calls_stop_the_run(kube: FixtureKube) -> None:
+    turns = [[LIST_PODS]] * (MAX_REPEATED_CALLS + 1)
 
     result = investigate("q", "scenario-01", make_settings(), kube, ScriptedModel(turns))
 
@@ -101,7 +104,7 @@ def test_investigate_ungrounded_excerpt_is_repaired_once(kube: FixtureKube) -> N
     assert result.diagnosis.evidence[0].excerpt == "CrashLoopBackOff"
 
 
-def test_investigate_repeatedly_ungrounded_diagnosis_falls_back(kube: FixtureKube) -> None:
+def test_investigate_ungrounded_twice_falls_back(kube: FixtureKube) -> None:
     bad = [{"claim": "x", "tool_call_id": "t9", "excerpt": "anything"}]
     turns = [[LIST_PODS], [submit(bad)], [submit(bad)], [submit(bad)]]
 
@@ -111,7 +114,7 @@ def test_investigate_repeatedly_ungrounded_diagnosis_falls_back(kube: FixtureKub
     assert result.diagnosis.category is FaultCategory.INCONCLUSIVE
 
 
-def test_investigate_model_error_returns_inconclusive_instead_of_crashing(
+def test_investigate_model_error_is_inconclusive(
     kube: FixtureKube,
 ) -> None:
     class FailingModel:
@@ -126,7 +129,7 @@ def test_investigate_model_error_returns_inconclusive_instead_of_crashing(
     assert result.diagnosis.confidence == 0.0
 
 
-def test_investigate_namespace_outside_allowlist_is_recorded_as_tool_error(
+def test_investigate_disallowed_namespace_is_tool_error(
     kube: FixtureKube,
 ) -> None:
     turns = [[tool_call("list_pods", namespace="kube-system")], [submit(GOOD_EVIDENCE)]]
@@ -156,7 +159,7 @@ def test_check_diagnosis_rejects_unsupported_evidence(
     assert problem in problems[0]
 
 
-def test_check_diagnosis_accepts_excerpt_copied_from_json_escaped_output() -> None:
+def test_check_diagnosis_accepts_json_escaped_quote() -> None:
     ledger = [
         {"id": "t1", "output": '{"log": "PAYMENT_TIMEOUT_MS=\\"30s\\" invalid"}', "error": None}
     ]
@@ -168,7 +171,7 @@ def test_check_diagnosis_accepts_excerpt_copied_from_json_escaped_output() -> No
     assert diagnosis is not None
 
 
-def test_check_diagnosis_accepts_excerpt_of_a_failed_call_as_the_model_saw_it() -> None:
+def test_check_diagnosis_accepts_quoted_tool_error() -> None:
     ledger = [{"id": "t1", "output": "", "error": 'API error 404: configmaps "app" not found'}]
     excerpt = 'ERROR: API error 404: configmaps "app" not found'
     raw = submit([{"claim": "c", "tool_call_id": "t1", "excerpt": excerpt}])
@@ -223,7 +226,7 @@ def no_verify_wait(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.usefixtures("no_verify_wait")
-def test_remediation_approved_patches_and_verifies_with_fresh_evidence() -> None:
+def test_remediation_approved_patches_and_verifies() -> None:
     cluster = FakeCluster()
     seen: list[RemediationProposal] = []
 
@@ -266,7 +269,7 @@ def test_remediation_declined_changes_nothing() -> None:
 
 
 @pytest.mark.usefixtures("no_verify_wait")
-def test_remediation_service_changed_after_approval_is_not_patched() -> None:
+def test_remediation_changed_service_is_not_patched() -> None:
     cluster = FakeCluster()
 
     def approve_while_someone_edits(proposal: RemediationProposal) -> bool:
@@ -288,7 +291,7 @@ def test_remediation_service_changed_after_approval_is_not_patched() -> None:
     assert "test operation failed" in result.remediation.message
 
 
-def test_remediation_that_never_converges_checks_each_attempt_and_sleeps_between(
+def test_remediation_unresolved_polls_every_attempt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sleeps: list[float] = []
@@ -310,7 +313,7 @@ def test_remediation_that_never_converges_checks_each_attempt_and_sleeps_between
     assert len(sleeps) == agent_module.VERIFY_ATTEMPTS - 1
 
 
-def test_remediation_selector_matching_no_ready_pods_is_never_proposed() -> None:
+def test_remediation_without_ready_pods_is_not_proposed() -> None:
     cluster = FakeCluster(ready=False)
     asked: list[RemediationProposal] = []
 
@@ -329,7 +332,7 @@ def test_remediation_selector_matching_no_ready_pods_is_never_proposed() -> None
     assert "matches no Ready pods" in result.remediation.message
 
 
-def test_fallback_diagnosis_without_any_evidence_is_inconclusive_and_cites_nothing() -> None:
+def test_fallback_without_evidence_is_inconclusive() -> None:
     diagnosis = agent_module.fallback_diagnosis("model_error", [])
 
     assert diagnosis.category is FaultCategory.INCONCLUSIVE

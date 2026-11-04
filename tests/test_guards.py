@@ -9,11 +9,11 @@ from k8s_aiops_agent.guards import (
 )
 
 
-def test_ensure_namespace_allowed_with_listed_namespace_passes() -> None:
+def test_listed_namespace_is_allowed() -> None:
     ensure_namespace_allowed("scenario-01", ["scenario-01"])
 
 
-def test_ensure_namespace_allowed_outside_allowlist_raises_forbidden() -> None:
+def test_namespace_outside_allowlist_is_forbidden() -> None:
     with pytest.raises(ToolForbiddenError, match="kube-system"):
         ensure_namespace_allowed("kube-system", ["scenario-01"])
 
@@ -46,7 +46,7 @@ def test_truncate_short_text_returns_it_unchanged() -> None:
     assert truncate("short", 100) == "short"
 
 
-def test_truncate_long_text_keeps_head_and_tail_within_limit() -> None:
+def test_truncate_keeps_head_and_tail() -> None:
     text = "START" + "x" * 1_000 + "FATAL"
 
     result = truncate(text, 100)

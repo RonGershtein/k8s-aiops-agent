@@ -78,7 +78,7 @@ def result(ledger: list[dict[str, Any]] | None = None, **diagnosis: Any) -> Inve
     )
 
 
-def test_deterministic_checks_correct_grounded_safe_run_passes_all() -> None:
+def test_checks_correct_grounded_safe_run_passes() -> None:
     checks = deterministic_checks(SCENARIO, result(), SETTINGS)
 
     assert all(checks.values()), checks
@@ -99,15 +99,13 @@ def test_deterministic_checks_correct_grounded_safe_run_passes_all() -> None:
         ),
     ],
 )
-def test_deterministic_checks_flag_each_kind_of_bad_run(
-    diagnosis: dict[str, Any], failed_check: str
-) -> None:
+def test_checks_flag_each_kind_of_bad_run(diagnosis: dict[str, Any], failed_check: str) -> None:
     checks = deterministic_checks(SCENARIO, result(**diagnosis), SETTINGS)
 
     assert not checks[failed_check]
 
 
-def test_deterministic_checks_citing_only_irrelevant_evidence_misses_key_signals() -> None:
+def test_checks_irrelevant_evidence_misses_key_signals() -> None:
     ledger = [*LEDGER, {"id": "t2", "name": "list_pods", "output": "phase Running", "error": None}]
     evidence = [{"claim": "pods run", "tool_call_id": "t2", "excerpt": "Running"}]
 
@@ -117,7 +115,7 @@ def test_deterministic_checks_citing_only_irrelevant_evidence_misses_key_signals
     assert not checks["evidence_has_key_signals"]
 
 
-def test_deterministic_checks_missing_required_tool_fails_trajectory() -> None:
+def test_checks_missing_required_tool_fail() -> None:
     ledger = [{**LEDGER[0], "name": "describe_pod"}]
 
     checks = deterministic_checks(SCENARIO, result(ledger=ledger), SETTINGS)
@@ -142,7 +140,7 @@ def test_load_scenarios_without_held_out_skips_them() -> None:
     assert not any(s.held_out for s in scenarios)
 
 
-def test_load_scenarios_every_scenario_has_an_offline_script() -> None:
+def test_every_scenario_has_an_offline_script() -> None:
     scenarios = load_scenarios(SCENARIOS_DIR, include_held_out=True, only=None)
 
     assert all((SCRIPTS_DIR / f"{s.id}.yaml").exists() for s in scenarios)
@@ -158,13 +156,14 @@ def test_trial_result_judge_failure_is_recorded_not_raised() -> None:
     assert not trial.passed
 
 
-def test_run_evals_offline_runs_every_trial_and_reports_each_result(kube: FixtureKube) -> None:
+def test_run_evals_reports_every_trial(kube: FixtureKube) -> None:
     scenarios = load_scenarios(SCENARIOS_DIR, include_held_out=False, only=None)
     reported: list[str] = []
+    trials = 2
 
     results = run_evals(
         scenarios,
-        2,
+        trials,
         SETTINGS,
         kube,
         lambda s: scripted_model(s.id),
@@ -172,11 +171,11 @@ def test_run_evals_offline_runs_every_trial_and_reports_each_result(kube: Fixtur
         on_result=lambda trial: reported.append(trial.scenario),
     )
 
-    assert len(results) == len(reported) == 2 * len(scenarios)
+    assert len(results) == len(reported) == trials * len(scenarios)
     assert all(trial.passed for trial in results)
 
 
-def test_push_scores_attaches_checks_and_judge_scores_to_the_trace(
+def test_push_scores_attaches_to_trace(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     urlopen = MagicMock()
@@ -226,7 +225,7 @@ def graded_trial(**update: Any) -> TrialResult:
     return trial_result(SCENARIO, 1, result(), SETTINGS, None).model_copy(update=update)
 
 
-def test_pass_rate_leaves_errored_trials_out_of_the_denominator() -> None:
+def test_pass_rate_excludes_errored_trials() -> None:
     trials = [graded_trial(), graded_trial(passed=False), graded_trial(stop_reason="model_error")]
 
     rate = pass_rate(trials)
@@ -242,7 +241,7 @@ def test_pass_rate_with_only_errored_trials_is_zero() -> None:
     assert rate == 0.0
 
 
-def test_render_report_lists_errored_trials_apart_from_failures() -> None:
+def test_report_lists_errored_apart_from_failed() -> None:
     trials = [graded_trial(), graded_trial(trial=2, stop_reason="model_error")]
 
     report = render_report(trials, "fixture-gemini")
