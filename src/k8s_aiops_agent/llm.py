@@ -309,5 +309,9 @@ def build_model(settings: AgentSettings, script: Path | None = None) -> ChatMode
     if settings.llm_provider is LlmProvider.GEMINI:
         return GeminiModel(settings)
     if script is None:
-        raise ValueError("the scripted provider needs a script file (see evals/scripted/)")
+        raise ValueError(
+            "no model API configured. Set AGENT_LLM_PROVIDER=gemini and GEMINI_API_KEY (free tier) "
+            "or AGENT_LLM_PROVIDER=anthropic and ANTHROPIC_API_KEY in .env. The default 'scripted' "
+            "provider is an offline test double and needs --script evals/scripted/<scenario>.yaml"
+        )
     return ScriptedModel.from_file(script)

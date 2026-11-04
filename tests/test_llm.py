@@ -13,6 +13,7 @@ from k8s_aiops_agent.llm import (
     AnthropicModel,
     GeminiModel,
     ModelError,
+    build_model,
 )
 from tests.builders import gemini_settings, make_settings, mock_http, tool_call
 
@@ -188,3 +189,10 @@ def test_gemini_invalid_tool_arguments_raise_model_error() -> None:
 
     with pytest.raises(ModelError, match="invalid tool arguments"):
         model.create("system", [], [])
+
+
+def test_build_model_without_api_or_script_explains_the_key() -> None:
+    settings = make_settings()
+
+    with pytest.raises(ValueError, match="GEMINI_API_KEY"):
+        build_model(settings)

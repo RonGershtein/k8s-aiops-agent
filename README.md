@@ -97,6 +97,17 @@ key the agent runs with `AGENT_LLM_PROVIDER=scripted`, an offline test double (s
 
 ## Run the agent
 
+**A real run needs a model API key.** Put one in `.env` (created by `make up`):
+
+```bash
+AGENT_LLM_PROVIDER=gemini
+GEMINI_API_KEY=...        # free tier: https://aistudio.google.com/api-keys
+# or: AGENT_LLM_PROVIDER=anthropic and ANTHROPIC_API_KEY=...
+```
+
+Without a key, the evals still run offline with the scripted test double (see
+[Run the evaluations](#run-the-evaluations)).
+
 In a container (only Docker needed):
 
 ```bash
