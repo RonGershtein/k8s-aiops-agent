@@ -35,6 +35,7 @@ from k8s_aiops_agent.tools import (
     ToolRecord,
     anthropic_tool_definitions,
     run_tool,
+    shown_output,
     tool_result_text,
 )
 
@@ -448,7 +449,7 @@ def check_diagnosis(
         elif not normalize_text(item.excerpt):
             problems.append(f"excerpt for {item.tool_call_id} is empty; quote the output")
         elif normalize_text(item.excerpt) not in normalize_text(
-            record["error"] or record["output"]
+            shown_output(record["error"], record["output"])
         ):
             problems.append(f"excerpt for {item.tool_call_id} is not verbatim from that output")
     return (None, problems) if problems else (diagnosis, [])

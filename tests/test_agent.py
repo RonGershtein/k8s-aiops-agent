@@ -168,6 +168,17 @@ def test_check_diagnosis_accepts_excerpt_copied_from_json_escaped_output() -> No
     assert diagnosis is not None
 
 
+def test_check_diagnosis_accepts_excerpt_of_a_failed_call_as_the_model_saw_it() -> None:
+    ledger = [{"id": "t1", "output": "", "error": 'API error 404: configmaps "app" not found'}]
+    excerpt = 'ERROR: API error 404: configmaps "app" not found'
+    raw = submit([{"claim": "c", "tool_call_id": "t1", "excerpt": excerpt}])
+
+    diagnosis, problems = check_diagnosis(raw["input"], ledger)
+
+    assert problems == []
+    assert diagnosis is not None
+
+
 class FakeCluster:
     """Just enough of a gateway for the remediation path; patching changes what reads return."""
 

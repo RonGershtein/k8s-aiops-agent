@@ -170,7 +170,12 @@ def run_tool(
     )
 
 
+def shown_output(error: str | None, output: str) -> str:
+    """The tool output exactly as the model sees it, so its quotes can be checked against it."""
+    return f"ERROR: {error}" if error else output
+
+
 def tool_result_text(record: ToolRecord) -> str:
-    body = f"ERROR: {record.error}" if record.error else record.output
+    body = shown_output(record.error, record.output)
     # Tool output is untrusted cluster data; the wrapper tells the model where it starts and ends.
     return f"evidence_id: {record.id}\n<tool_output>\n{body}\n</tool_output>"
