@@ -70,7 +70,7 @@ def eval_command(
 ) -> None:
     """Run the scenario evals and write a Markdown + JSON report."""
     settings = _load_settings(backend, llm)
-    scenarios = load_scenarios(Path("scenarios"), held_out, scenario)
+    scenarios = load_scenarios(settings.fixtures_dir, held_out, scenario)
     if not scenarios:
         raise _usage_error("no scenarios selected")
     missing = {s.namespace for s in scenarios} - set(settings.allowed_namespaces)

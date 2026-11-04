@@ -429,6 +429,8 @@ def check_diagnosis(
         record = records.get(item.tool_call_id)
         if record is None:
             problems.append(f"evidence cites unknown id '{item.tool_call_id}'")
+        elif not normalize_text(item.excerpt):
+            problems.append(f"excerpt for {item.tool_call_id} is empty; quote the output")
         elif normalize_text(item.excerpt) not in normalize_text(
             record["error"] or record["output"]
         ):

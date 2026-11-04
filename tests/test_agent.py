@@ -141,6 +141,7 @@ def test_investigate_namespace_outside_allowlist_is_recorded_as_tool_error(
     [
         ({"tool_call_id": "t7", "excerpt": "x"}, "unknown id 't7'"),
         ({"tool_call_id": "t1", "excerpt": "not in output"}, "not verbatim"),
+        ({"tool_call_id": "t1", "excerpt": " "}, "is empty"),
     ],
 )
 def test_check_diagnosis_rejects_unsupported_evidence(
