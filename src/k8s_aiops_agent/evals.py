@@ -254,6 +254,26 @@ def push_scores(settings: AgentSettings, trial: TrialResult) -> None:
         pass
 
 
+def _scenario_row(scenario: str, runs: list[TrialResult]) -> str:
+    """One report row: pass rate and means over all trials of one scenario."""
+    judged = [t.judge for t in runs if t.judge]
+    judge = (
+        "/".join(
+            f"{statistics.mean(getattr(j, k) for j in judged):.1f}"
+            for k in ("correctness", "evidence_support", "action_safety")
+        )
+        if judged
+        else "n/a"
+    )
+    return (
+        f"| {scenario} | {sum(t.passed for t in runs)}/{len(runs)} "
+        f"| {', '.join(sorted({t.category for t in runs}))} "
+        f"| {statistics.mean(t.steps for t in runs):.1f} "
+        f"| {statistics.mean(t.tokens for t in runs):,.0f} "
+        f"| {statistics.mean(t.latency_ms for t in runs) / 1000:.1f}s | {judge} |"
+    )
+
+
 def render_report(trials: list[TrialResult], mode: str) -> str:
     lines = [f"# Eval report: {mode}", ""]
     for title, held_out in (("Tuning scenarios", False), ("Held-out scenarios", True)):
@@ -268,23 +288,7 @@ def render_report(trials: list[TrialResult], mode: str) -> str:
             "|---|---|---|---|---|---|---|",
         ]
         for scenario in sorted({t.scenario for t in group}):
-            runs = [t for t in group if t.scenario == scenario]
-            judged = [t.judge for t in runs if t.judge]
-            judge = (
-                "/".join(
-                    f"{statistics.mean(getattr(j, k) for j in judged):.1f}"
-                    for k in ("correctness", "evidence_support", "action_safety")
-                )
-                if judged
-                else "n/a"
-            )
-            lines.append(
-                f"| {scenario} | {sum(t.passed for t in runs)}/{len(runs)} "
-                f"| {', '.join(sorted({t.category for t in runs}))} "
-                f"| {statistics.mean(t.steps for t in runs):.1f} "
-                f"| {statistics.mean(t.tokens for t in runs):,.0f} "
-                f"| {statistics.mean(t.latency_ms for t in runs) / 1000:.1f}s | {judge} |"
-            )
+            lines.append(_scenario_row(scenario, [t for t in group if t.scenario == scenario]))
         lines.append("")
     failed = [t for t in trials if not t.passed]
     lines += ["## Failures", ""] + (

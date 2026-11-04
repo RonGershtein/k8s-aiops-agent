@@ -274,26 +274,11 @@ class _RemediationNodes:
 
     def verify(self, state: AgentState) -> dict[str, Any]:
         proposal = RemediationProposal.model_validate(state["proposal"])
-        args = {"namespace": proposal.namespace, "name": proposal.service}
-        ledger_size = len(state.get("ledger", []))
-        records: list[ToolRecord] = []
-        with observe("remediation.verify", "span", input_value=args) as span:
-            for attempt in range(VERIFY_ATTEMPTS):
-                if attempt:
-                    time.sleep(VERIFY_INTERVAL_SECONDS)
-                record = run_tool(
-                    self._kube,
-                    f"v{ledger_size + attempt + 1}",
-                    "get_service_and_endpoints",
-                    args,
-                    self._settings.allowed_namespaces,
-                    self._settings.max_tool_output_chars,
-                )
-                records.append(record)
-                resolved = routes_to(record, proposal.matching_ready_pods)
-                if resolved:
-                    break
+        target = {"namespace": proposal.namespace, "name": proposal.service}
+        with observe("remediation.verify", "span", input_value=target) as span:
+            records = self._poll_until_routed(proposal, len(state.get("ledger", [])))
             last = records[-1]
+            resolved = routes_to(last, proposal.matching_ready_pods)
             set_output(span, {"resolved": resolved, "attempts": len(records)})
         evidence = Evidence(
             claim="Fresh read of the Service and its endpoints after the patch.",
@@ -316,6 +301,28 @@ class _RemediationNodes:
                 verification=[evidence],
             ),
         }
+
+    def _poll_until_routed(
+        self, proposal: RemediationProposal, ledger_size: int
+    ) -> list[ToolRecord]:
+        """Fresh endpoint reads until the selected pods are ready endpoints, or attempts run out."""
+        args = {"namespace": proposal.namespace, "name": proposal.service}
+        records: list[ToolRecord] = []
+        for attempt in range(VERIFY_ATTEMPTS):
+            if attempt:
+                time.sleep(VERIFY_INTERVAL_SECONDS)
+            record = run_tool(
+                self._kube,
+                f"v{ledger_size + attempt + 1}",
+                "get_service_and_endpoints",
+                args,
+                self._settings.allowed_namespaces,
+                self._settings.max_tool_output_chars,
+            )
+            records.append(record)
+            if routes_to(record, proposal.matching_ready_pods):
+                break
+        return records
 
 
 def build_graph(
@@ -380,26 +387,35 @@ def investigate(
         while state.get("__interrupt__") and remediation is not None:
             proposal = RemediationProposal.model_validate(state["__interrupt__"][0].value)
             state = graph.invoke(Command(resume=remediation.approve(proposal)), config)
-        result = InvestigationResult(
-            question=question,
-            diagnosis=Diagnosis.model_validate(state["diagnosis"]),
-            stats=RunStats(
-                steps=state.get("steps", 0),
-                tool_calls=len([r for r in state.get("ledger", []) if r["id"].startswith("t")]),
-                input_tokens=state.get("input_tokens", 0),
-                output_tokens=state.get("output_tokens", 0),
-                latency_ms=int((time.monotonic() - started) * 1000),
-                stop_reason=state["stop_reason"],
-                trace_id=trace_id,
-            ),
-            remediation=RemediationOutcome.model_validate(state["remediation"])
-            if state.get("remediation")
-            else None,
-            ledger=state.get("ledger", []),
-        )
+        latency_ms = int((time.monotonic() - started) * 1000)
+        result = _result_from_state(question, state, latency_ms, trace_id)
         set_output(span, result.diagnosis.model_dump(mode="json"))
         span.set_attribute("stop_reason", result.stats.stop_reason)
     return result
+
+
+def _result_from_state(
+    question: str, state: dict[str, Any], latency_ms: int, trace_id: str | None
+) -> InvestigationResult:
+    ledger = state.get("ledger", [])
+    return InvestigationResult(
+        question=question,
+        diagnosis=Diagnosis.model_validate(state["diagnosis"]),
+        stats=RunStats(
+            steps=state.get("steps", 0),
+            # Investigation calls only; v... records are the fix's verification reads.
+            tool_calls=len([r for r in ledger if r["id"].startswith("t")]),
+            input_tokens=state.get("input_tokens", 0),
+            output_tokens=state.get("output_tokens", 0),
+            latency_ms=latency_ms,
+            stop_reason=state["stop_reason"],
+            trace_id=trace_id,
+        ),
+        remediation=RemediationOutcome.model_validate(state["remediation"])
+        if state.get("remediation")
+        else None,
+        ledger=ledger,
+    )
 
 
 def _outcome(*, approved: bool, applied: bool, message: str, **extra: Any) -> dict[str, Any]:

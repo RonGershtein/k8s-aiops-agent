@@ -100,16 +100,24 @@ def eval_command(
         )
     finally:
         shutdown_tracing()
-    mode = f"{settings.backend.value}-{settings.llm_provider.value}"
+    report = _write_reports(
+        results, f"{settings.backend.value}-{settings.llm_provider.value}", out_dir
+    )
+    rate = sum(r.passed for r in results) / len(results)
+    console.print(f"pass rate {rate:.0%} -> {report}")
+    if rate < min_pass_rate:
+        raise typer.Exit(code=1)
+
+
+def _write_reports(results: list[TrialResult], mode: str, out_dir: Path) -> Path:
+    """Writes <mode>.md for people and <mode>.json for tools; returns the Markdown path."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / f"{mode}.md").write_text(render_report(results, mode))
+    report = out_dir / f"{mode}.md"
+    report.write_text(render_report(results, mode))
     (out_dir / f"{mode}.json").write_text(
         json.dumps([r.model_dump(mode="json") for r in results], indent=2) + "\n"
     )
-    rate = sum(r.passed for r in results) / len(results)
-    console.print(f"pass rate {rate:.0%} -> {out_dir / f'{mode}.md'}")
-    if rate < min_pass_rate:
-        raise typer.Exit(code=1)
+    return report
 
 
 @app.command("mcp")
