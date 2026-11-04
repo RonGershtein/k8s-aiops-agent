@@ -214,16 +214,16 @@ def inline_refs(schema: dict[str, Any]) -> dict[str, Any]:
     """Replace Pydantic's $defs/$ref with inline copies; not every Gemini endpoint resolves refs."""
     defs = schema.get("$defs", {})
 
-    def resolve(node: Any) -> Any:
+    def resolve_refs(node: Any) -> Any:
         if isinstance(node, dict):
             if "$ref" in node:
-                return resolve(defs[node["$ref"].rsplit("/", 1)[-1]])
-            return {k: resolve(v) for k, v in node.items() if k != "$defs"}
+                return resolve_refs(defs[node["$ref"].rsplit("/", 1)[-1]])
+            return {k: resolve_refs(v) for k, v in node.items() if k != "$defs"}
         if isinstance(node, list):
-            return [resolve(v) for v in node]
+            return [resolve_refs(v) for v in node]
         return node
 
-    resolved: dict[str, Any] = resolve(schema)
+    resolved: dict[str, Any] = resolve_refs(schema)
     return resolved
 
 

@@ -62,7 +62,7 @@ def investigate_command(
     if as_json:
         print(result.model_dump_json(indent=2))
     else:
-        _render(result, settings.trace_dir)
+        _print_result(result, settings.trace_dir)
 
 
 @app.command("eval")
@@ -218,22 +218,23 @@ def _ask_approval(proposal: RemediationProposal) -> bool:
         return False
 
 
-def _render(result: InvestigationResult, trace_dir: Path) -> None:
-    d = result.diagnosis
+def _print_result(result: InvestigationResult, trace_dir: Path) -> None:
+    diagnosis = result.diagnosis
     if result.stats.trace_id:
         console.print(_trace_tree(trace_dir / f"{result.stats.trace_id}.jsonl"))
     evidence = "\n".join(
-        escape(f"  [{e.tool_call_id}] {e.claim}\n      “{e.excerpt}”") for e in d.evidence
+        escape(f"  [{e.tool_call_id}] {e.claim}\n      “{e.excerpt}”") for e in diagnosis.evidence
     )
     color = {FaultCategory.NO_FAULT: "green", FaultCategory.INCONCLUSIVE: "yellow"}.get(
-        d.category, "red"
+        diagnosis.category, "red"
     )
     console.print(
         Panel(
-            f"[bold]{d.category.value}[/] (confidence {d.confidence:.0%})\n\n"
-            f"[bold]Root cause[/]\n  {escape(d.root_cause)}\n\n[bold]Evidence[/]\n{evidence}\n\n"
-            f"[bold]Recommended action[/] (risk: {d.action_risk})\n  "
-            f"{escape(d.recommended_action)}",
+            f"[bold]{diagnosis.category.value}[/] (confidence {diagnosis.confidence:.0%})\n\n"
+            f"[bold]Root cause[/]\n  {escape(diagnosis.root_cause)}\n\n"
+            f"[bold]Evidence[/]\n{evidence}\n\n"
+            f"[bold]Recommended action[/] (risk: {diagnosis.action_risk})\n  "
+            f"{escape(diagnosis.recommended_action)}",
             title=escape(f"Diagnosis: {result.question}"),
             border_style=color,
         )
@@ -267,7 +268,7 @@ def _trace_tree(path: Path) -> Tree | str:
     roots = [s for s in spans if s["parent_id"] not in {x["span_id"] for x in spans}]
     tree = Tree(f"[bold]trace {spans[0]['trace_id']}[/]")
 
-    def add(node: Tree, span: dict[str, Any]) -> None:
+    def add_span(node: Tree, span: dict[str, Any]) -> None:
         attrs = span["attributes"]
         ms = (span["end_ns"] - span["start_ns"]) // 1_000_000
         label = f"{span['name']} [dim]{ms}ms[/]"
@@ -284,10 +285,10 @@ def _trace_tree(path: Path) -> Tree | str:
             label += " [red]ERROR[/]"
         child = node.add(label)
         for sub in by_parent.get(span["span_id"], []):
-            add(child, sub)
+            add_span(child, sub)
 
     for root in roots:
-        add(tree, root)
+        add_span(tree, root)
     return tree
 
 

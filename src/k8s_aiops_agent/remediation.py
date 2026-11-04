@@ -54,7 +54,9 @@ def build_proposal(
     current: dict[str, str] = service["selector"]
     if current == fix.proposed_selector:
         return "the Service already uses the proposed selector"
-    matching = [p["name"] for p in pods if _selects(fix.proposed_selector, p) and _is_ready(p)]
+    matching = [
+        p["name"] for p in pods if _selector_matches(fix.proposed_selector, p) and _is_ready(p)
+    ]
     if not matching:
         return f"selector {fix.proposed_selector} matches no Ready pods, so patching would not help"
     return RemediationProposal(
@@ -81,7 +83,7 @@ def routes_to(record: ToolRecord, pods: list[str]) -> bool:
     return set(pods) <= set(service.get("ready_endpoints", []))
 
 
-def _selects(selector: dict[str, str], pod: Json) -> bool:
+def _selector_matches(selector: dict[str, str], pod: Json) -> bool:
     labels = pod.get("labels") or {}
     return all(labels.get(key) == value for key, value in selector.items())
 

@@ -97,21 +97,21 @@ class LiveKube:
         previous: bool = False,
         tail_lines: int = DEFAULT_LOG_LINES,
     ) -> str:
-        def read(prev: bool) -> str:
+        def read_logs(previous: bool) -> str:
             logs: str = call_api(
                 self._core.read_namespaced_pod_log,
                 name,
                 namespace,
                 container=container,
-                previous=prev,
+                previous=previous,
                 tail_lines=tail_lines,
             )
             return logs
 
         if not previous:
-            return read(False)
+            return read_logs(previous=False)
         try:
-            logs = read(True)
+            logs = read_logs(previous=True)
             # The kubelet sometimes answers 200 with this message instead of an error status.
             if not logs.startswith(_LOGS_GONE):
                 return logs
@@ -120,7 +120,7 @@ class LiveKube:
             # (already exited) container still holds the crash output.
             if error.status in (403, 404):
                 raise
-        return PREVIOUS_LOGS_UNAVAILABLE + read(False)
+        return PREVIOUS_LOGS_UNAVAILABLE + read_logs(previous=False)
 
     def get_events(self, namespace: str, involved_object: str | None = None) -> list[Json]:
         selector = f"involvedObject.name={involved_object}" if involved_object else None

@@ -11,7 +11,7 @@ import statistics
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import anthropic
 import httpx
@@ -23,7 +23,7 @@ from k8s_aiops_agent.config import AgentSettings
 from k8s_aiops_agent.guards import normalize_text
 from k8s_aiops_agent.kube import KubeGateway
 from k8s_aiops_agent.llm import ChatModel, ModelError, inline_refs, post_gemini
-from k8s_aiops_agent.schemas import InvestigationResult
+from k8s_aiops_agent.schemas import InvestigationResult, StopReason
 from k8s_aiops_agent.telemetry import LANGFUSE_TIMEOUT_SECONDS, langfuse_auth_header
 
 logger = logging.getLogger(__name__)
@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 SCENARIO_FILE = "scenario.yaml"
 # The budget is checked between model calls, so the final call may overshoot it.
 TOKEN_BUDGET_SLACK = 1.5
+JUDGE_EFFORT: Final = "medium"
 JUDGE_TIMEOUT_SECONDS = 60
 JUDGE_MAX_TOKENS = 4_000
 # Rubric scores run 1-5; a trial passes the judge only if every criterion reaches this.
@@ -84,7 +85,7 @@ class TrialResult(BaseModel):
     tool_calls: int
     tokens: int
     latency_ms: int
-    stop_reason: str
+    stop_reason: StopReason
     trace_id: str | None
     category: str
     root_cause: str
@@ -174,7 +175,7 @@ class ClaudeJudge:
             max_tokens=JUDGE_MAX_TOKENS,
             messages=[{"role": "user", "content": prompt}],
             output_format=JudgeScore,
-            output_config={"effort": "medium"},
+            output_config={"effort": JUDGE_EFFORT},
         )
         if response.parsed_output is None:
             raise RuntimeError(f"judge returned no parsable output ({response.stop_reason})")

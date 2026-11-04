@@ -28,6 +28,7 @@ from k8s_aiops_agent.schemas import (
     RemediationOutcome,
     RemediationProposal,
     RunStats,
+    StopReason,
 )
 from k8s_aiops_agent.telemetry import current_trace_id, mark_error, observe, set_output
 from k8s_aiops_agent.tools import (
@@ -59,8 +60,8 @@ class AgentState(TypedDict, total=False):
     repeated_calls: int
     repairs: int
     last_turn: dict[str, Any]
-    finalizing: str | None
-    stop_reason: str | None
+    finalizing: StopReason | None
+    stop_reason: StopReason | None
     diagnosis: dict[str, Any] | None
     proposal: dict[str, Any] | None
     remediation: dict[str, Any] | None
@@ -129,12 +130,12 @@ class _InvestigationNodes:
         return "tools" if tool_uses else "nudge"
 
     def tools(self, state: AgentState) -> dict[str, Any]:
-        seen = {_call_key(r["name"], r["args"]): r["id"] for r in state.get("ledger", [])}
+        seen = {_tool_call_key(r["name"], r["args"]): r["id"] for r in state.get("ledger", [])}
         results: list[dict[str, Any]] = []
         records: list[dict[str, Any]] = []
         repeated = state.get("repeated_calls", 0)
         for call in _tool_uses(state):
-            key = _call_key(call["name"], call["input"])
+            key = _tool_call_key(call["name"], call["input"])
             if key in seen:
                 repeated += 1
                 text = f"Duplicate call: this was already answered as {seen[key]}; reuse it."
@@ -241,7 +242,9 @@ class _RemediationNodes:
             proposal = build_proposal(self._kube, state["namespace"], fix)
             set_output(span, proposal if isinstance(proposal, str) else proposal.model_dump())
         if isinstance(proposal, str):
-            return _outcome(approved=False, applied=False, message=f"No fix proposed: {proposal}")
+            return _remediation_outcome(
+                approved=False, applied=False, message=f"No fix proposed: {proposal}"
+            )
         return {"proposal": proposal.model_dump(mode="json")}
 
     def route_after_propose(self, state: AgentState) -> Literal["approve", "__end__"]:
@@ -254,7 +257,9 @@ class _RemediationNodes:
             set_output(span, {"approved": approved})
         if approved:
             return Command(goto="apply")
-        declined = _outcome(approved=False, applied=False, message="Fix declined by the operator.")
+        declined = _remediation_outcome(
+            approved=False, applied=False, message="Fix declined by the operator."
+        )
         return Command(goto="__end__", update=declined)
 
     def apply(self, state: AgentState) -> dict[str, Any]:
@@ -269,7 +274,9 @@ class _RemediationNodes:
                 )
             except KubeError as error:
                 mark_error(span, str(error))
-                return _outcome(approved=True, applied=False, message=f"Patch failed: {error}")
+                return _remediation_outcome(
+                    approved=True, applied=False, message=f"Patch failed: {error}"
+                )
         return {}
 
     def route_after_apply(self, state: AgentState) -> Literal["verify", "__end__"]:
@@ -296,7 +303,7 @@ class _RemediationNodes:
         )
         return {
             "ledger": [r.to_dict() for r in records],
-            **_outcome(
+            **_remediation_outcome(
                 approved=True,
                 applied=True,
                 resolved=resolved,
@@ -421,7 +428,9 @@ def _result_from_state(
     )
 
 
-def _outcome(*, approved: bool, applied: bool, message: str, **extra: Any) -> dict[str, Any]:
+def _remediation_outcome(
+    *, approved: bool, applied: bool, message: str, **extra: Any
+) -> dict[str, Any]:
     outcome = RemediationOutcome(
         approved=approved,
         applied=applied,
@@ -457,7 +466,7 @@ def check_diagnosis(
     return (None, problems) if problems else (diagnosis, [])
 
 
-def fallback_diagnosis(reason: str, ledger: list[dict[str, Any]]) -> Diagnosis:
+def fallback_diagnosis(reason: StopReason, ledger: list[dict[str, Any]]) -> Diagnosis:
     evidence = [
         Evidence(
             claim="Last observation before the investigation stopped.",
@@ -492,11 +501,11 @@ def _tool_result(tool_use_id: str, text: str, is_error: bool = False) -> dict[st
     }
 
 
-def _call_key(name: str, args: dict[str, Any]) -> str:
+def _tool_call_key(name: str, args: dict[str, Any]) -> str:
     return f"{name}:{json.dumps(args, sort_keys=True)}"
 
 
-def _budget_exceeded(state: AgentState, settings: AgentSettings) -> str | None:
+def _budget_exceeded(state: AgentState, settings: AgentSettings) -> StopReason | None:
     if state.get("steps", 0) >= settings.max_steps:
         return "max_steps"
     if state.get("input_tokens", 0) + state.get("output_tokens", 0) >= settings.max_total_tokens:
