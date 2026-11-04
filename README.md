@@ -131,8 +131,9 @@ docker compose run --rm agent eval --llm anthropic --trials 3 --judge         # 
 ```
 
 Reports are written to `evals/results/<backend>-<llm>.md` (and `.json`), separating tuning and
-held-out scenarios. Committed reports: [offline](evals/results/fixture-scripted.md)
-<!-- claude-report -->.
+held-out scenarios. The committed report is the [offline gate](evals/results/fixture-scripted.md).
+The Claude report (3 trials plus the judge) comes from the second command above or from the manual
+`real-llm-eval` CI job, which uploads it as the `eval-claude` artifact.
 
 ### Evaluation strategy
 

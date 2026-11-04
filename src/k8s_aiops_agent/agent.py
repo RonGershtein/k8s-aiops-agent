@@ -366,12 +366,13 @@ def investigate(
     }
     started = time.monotonic()
     request = {"question": question, "namespace": namespace}
+    first_message = {"role": "user", "content": f"Namespace: {namespace}\nQuestion: {question}"}
     with observe("investigate", "agent", input_value=request, namespace=namespace) as span:
         trace_id = current_trace_id()
         state: dict[str, Any] = graph.invoke(
             {
                 **request,
-                "messages": [{"role": "user", "content": _first_message(question, namespace)}],
+                "messages": [first_message],
                 "started_at": time.time(),
             },
             config,
@@ -454,10 +455,6 @@ def fallback_diagnosis(reason: str, ledger: list[dict[str, Any]]) -> Diagnosis:
         action_risk="none",
         confidence=0.0,
     )
-
-
-def _first_message(question: str, namespace: str) -> str:
-    return f"Namespace: {namespace}\nQuestion: {question}"
 
 
 def _tool_uses(state: AgentState) -> list[dict[str, Any]]:
