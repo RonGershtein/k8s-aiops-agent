@@ -85,6 +85,17 @@ class TrialResult(BaseModel):
     category: str
     root_cause: str
 
+    @property
+    def errored(self) -> bool:
+        """The model API never answered (quota, outage): infrastructure, not a wrong diagnosis."""
+        return self.stop_reason == "model_error"
+
+
+def pass_rate(trials: list[TrialResult]) -> float:
+    """Share of graded trials that passed; errored trials are reported, not graded."""
+    graded = [t for t in trials if not t.errored]
+    return sum(t.passed for t in graded) / len(graded) if graded else 0.0
+
 
 def load_scenarios(root: Path, include_held_out: bool, only: list[str] | None) -> list[Scenario]:
     scenarios = [
@@ -295,8 +306,12 @@ def push_scores(settings: AgentSettings, trial: TrialResult) -> None:
 
 
 def _scenario_row(scenario: str, runs: list[TrialResult]) -> str:
-    """One report row: pass rate and means over all trials of one scenario."""
-    judged = [t.judge for t in runs if t.judge]
+    """One report row: pass rate and means over the graded trials of one scenario."""
+    graded = [t for t in runs if not t.errored]
+    errored = f" (+{len(runs) - len(graded)} errored)" if len(graded) < len(runs) else ""
+    if not graded:
+        return f"| {scenario} | 0/0{errored} | n/a | n/a | n/a | n/a | n/a |"
+    judged = [t.judge for t in graded if t.judge]
     judge = (
         "/".join(
             f"{statistics.mean(getattr(j, k) for j in judged):.1f}"
@@ -306,16 +321,23 @@ def _scenario_row(scenario: str, runs: list[TrialResult]) -> str:
         else "n/a"
     )
     return (
-        f"| {scenario} | {sum(t.passed for t in runs)}/{len(runs)} "
-        f"| {', '.join(sorted({t.category for t in runs}))} "
-        f"| {statistics.mean(t.steps for t in runs):.1f} "
-        f"| {statistics.mean(t.tokens for t in runs):,.0f} "
-        f"| {statistics.mean(t.latency_ms for t in runs) / 1000:.1f}s | {judge} |"
+        f"| {scenario} | {sum(t.passed for t in graded)}/{len(graded)}{errored} "
+        f"| {', '.join(sorted({t.category for t in graded}))} "
+        f"| {statistics.mean(t.steps for t in graded):.1f} "
+        f"| {statistics.mean(t.tokens for t in graded):,.0f} "
+        f"| {statistics.mean(t.latency_ms for t in graded) / 1000:.1f}s | {judge} |"
     )
 
 
 def render_report(trials: list[TrialResult], mode: str) -> str:
-    lines = [f"# Eval report: {mode}", ""]
+    graded = [t for t in trials if not t.errored]
+    lines = [
+        f"# Eval report: {mode}",
+        "",
+        f"Pass rate {pass_rate(trials):.0%}: {sum(t.passed for t in graded)}/{len(graded)} graded "
+        f"trials passed, {len(trials) - len(graded)} errored.",
+        "",
+    ]
     for title, held_out in (("Tuning scenarios", False), ("Held-out scenarios", True)):
         group = [t for t in trials if t.held_out == held_out]
         if not group:
@@ -330,7 +352,7 @@ def render_report(trials: list[TrialResult], mode: str) -> str:
         for scenario in sorted({t.scenario for t in group}):
             lines.append(_scenario_row(scenario, [t for t in group if t.scenario == scenario]))
         lines.append("")
-    failed = [t for t in trials if not t.passed]
+    failed = [t for t in graded if not t.passed]
     lines += ["## Failures", ""] + (
         [
             f"- {t.scenario} #{t.trial}: "
@@ -341,4 +363,10 @@ def render_report(trials: list[TrialResult], mode: str) -> str:
         ]
         or ["None."]
     )
+    errored_trials = [t for t in trials if t.errored]
+    if errored_trials:
+        lines += ["", "## Errored (model API did not answer; not graded)", ""] + [
+            f"- {t.scenario} #{t.trial}: {t.root_cause} (trace {t.trace_id})"
+            for t in errored_trials
+        ]
     return "\n".join(lines) + "\n"

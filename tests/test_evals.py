@@ -11,9 +11,12 @@ from k8s_aiops_agent.evals import (
     GeminiJudge,
     JudgeScore,
     Scenario,
+    TrialResult,
     deterministic_checks,
     load_scenarios,
+    pass_rate,
     push_scores,
+    render_report,
     run_evals,
     trial_result,
 )
@@ -216,3 +219,34 @@ def test_gemini_judge_parses_the_json_score() -> None:
     graded = judge(SCENARIO, result())
 
     assert graded == score
+
+
+def graded_trial(**update: Any) -> TrialResult:
+    """A passing trial of SCENARIO, with fields overridden."""
+    return trial_result(SCENARIO, 1, result(), SETTINGS, None).model_copy(update=update)
+
+
+def test_pass_rate_leaves_errored_trials_out_of_the_denominator() -> None:
+    trials = [graded_trial(), graded_trial(passed=False), graded_trial(stop_reason="model_error")]
+
+    rate = pass_rate(trials)
+
+    assert rate == 0.5
+
+
+def test_pass_rate_with_only_errored_trials_is_zero() -> None:
+    trials = [graded_trial(stop_reason="model_error")]
+
+    rate = pass_rate(trials)
+
+    assert rate == 0.0
+
+
+def test_render_report_lists_errored_trials_apart_from_failures() -> None:
+    trials = [graded_trial(), graded_trial(trial=2, stop_reason="model_error")]
+
+    report = render_report(trials, "fixture-gemini")
+
+    assert "1/1 (+1 errored)" in report
+    assert "## Failures\n\nNone." in report
+    assert "## Errored (model API did not answer; not graded)" in report

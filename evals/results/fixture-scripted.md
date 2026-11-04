@@ -1,5 +1,7 @@
 # Eval report: fixture-scripted
 
+Pass rate 100%: 6/6 graded trials passed, 0 errored.
+
 ## Tuning scenarios
 
 | scenario | pass rate | categories | mean steps | mean tokens | mean latency | judge (c/e/a) |

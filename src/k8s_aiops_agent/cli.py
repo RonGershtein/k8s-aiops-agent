@@ -16,6 +16,7 @@ from k8s_aiops_agent.evals import (
     GeminiJudge,
     TrialResult,
     load_scenarios,
+    pass_rate,
     render_report,
     run_evals,
 )
@@ -96,7 +97,13 @@ def eval_command(
     grader = (GeminiJudge(settings) if gemini else ClaudeJudge(settings)) if judge else None
 
     def print_result(result: TrialResult) -> None:
-        mark = "[green]pass[/]" if result.passed else "[red]FAIL[/]"
+        mark = (
+            "[yellow]ERR[/]"
+            if result.errored
+            else "[green]pass[/]"
+            if result.passed
+            else "[red]FAIL[/]"
+        )
         console.print(
             f"{mark} {result.scenario} #{result.trial} {result.category} ({result.stop_reason})"
         )
@@ -116,7 +123,7 @@ def eval_command(
     report = _write_reports(
         results, f"{settings.backend.value}-{settings.llm_provider.value}", out_dir
     )
-    rate = sum(r.passed for r in results) / len(results)
+    rate = pass_rate(results)
     console.print(f"pass rate {rate:.0%} -> {report}")
     if rate < min_pass_rate:
         raise typer.Exit(code=1)
