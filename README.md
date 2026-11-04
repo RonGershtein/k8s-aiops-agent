@@ -75,12 +75,18 @@ Requirements: **Docker**, **kind**, **kubectl** and **make**. Everything else ru
 development without Docker you also need [uv](https://docs.astral.sh/uv/).
 
 ```bash
-make cluster-up          # kind cluster "aiops" + least-privilege agent RBAC + agent kubeconfigs
-cp .env.example .env     # then set ANTHROPIC_API_KEY and AGENT_LLM_PROVIDER=anthropic
-                         # (or GEMINI_API_KEY and AGENT_LLM_PROVIDER=gemini: free tier in Google AI Studio)
+make up
 ```
 
-`make cluster-up` is idempotent. The agent never uses your admin kubeconfig: it gets two
+That one command creates the kind cluster `aiops` with least-privilege agent RBAC and agent
+kubeconfigs, starts all six scenarios, creates `.env` from `.env.example` if you have none, and
+builds the agent image. The first run takes a few minutes (kind pulls its node image and the
+image builds); after that it takes seconds. For a real model,
+set `GEMINI_API_KEY` (free tier in Google AI Studio) or `ANTHROPIC_API_KEY` in `.env`, with the
+matching `AGENT_LLM_PROVIDER`. The steps are also separate targets: `make cluster-up`,
+`make scenarios-up` (or one with `make scenario-up S=01`) and `make cluster-down`.
+
+`make up` and `make cluster-up` are idempotent. The agent never uses your admin kubeconfig: it gets two
 ServiceAccount kubeconfigs in `.kube/` (mode 0600, gitignored). Their tokens last 24h; rerun
 `make cluster-up` to refresh them. kind clusters do not survive a Docker/WSL restart; rerun it
 then too.
@@ -130,7 +136,8 @@ Each scenario is a directory in `scenarios/` with `manifests.yaml` (what to appl
 snapshot of the namespace).
 
 ```bash
-make scenario-up S=01     # apply one scenario (00-05); wait ~60s for restarts and events
+make scenarios-up         # apply all scenarios (make up already did); wait ~60s for restarts and events
+make scenario-up S=01     # apply one scenario (00-05)
 make scenarios-down       # remove all scenario workloads
 make fixtures             # re-record every fixture.json from the live cluster
 ```
