@@ -983,6 +983,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
+    { name = "httpx" },
     { name = "kubernetes" },
     { name = "langgraph" },
     { name = "mcp" },
@@ -1006,6 +1007,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=2.4.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "kubernetes", specifier = ">=37.0.1" },
     { name = "langgraph", specifier = ">=1.2.19" },
     { name = "mcp", specifier = ">=2.3.0" },
