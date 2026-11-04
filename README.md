@@ -51,6 +51,7 @@ development without Docker you also need [uv](https://docs.astral.sh/uv/).
 ```bash
 make cluster-up          # kind cluster "aiops" + least-privilege agent RBAC + agent kubeconfigs
 cp .env.example .env     # then set ANTHROPIC_API_KEY and AGENT_LLM_PROVIDER=anthropic
+                         # (or GEMINI_API_KEY and AGENT_LLM_PROVIDER=gemini: free tier in Google AI Studio)
 ```
 
 `make cluster-up` is idempotent. The agent never uses your admin kubeconfig: it gets two
@@ -126,6 +127,7 @@ against. Nothing in the agent's code, tools or prompt mentions any scenario.
 ```bash
 make eval EVAL_ARGS="--llm scripted --backend fixture --min-pass-rate 1.0"   # offline, free (CI gate)
 make eval EVAL_ARGS="--llm anthropic --backend fixture --trials 3 --judge"   # real model + Claude judge
+make eval EVAL_ARGS="--llm gemini --backend fixture --trials 3 --judge"      # free-tier Gemini, judged by Gemini
 make eval EVAL_ARGS="--llm anthropic --backend live --trials 1"              # full end to end
 docker compose run --rm agent eval --llm anthropic --trials 3 --judge         # same, in Docker
 ```
@@ -246,7 +248,8 @@ the current API directly:
 - prompt caching
 - thinking blocks passed back unchanged (append-only history)
 
-A `ChatModel` interface keeps a scripted test double behind the same seam.
+A `ChatModel` interface keeps a scripted test double behind the same seam, plus a Gemini adapter
+(OpenAI-compatible endpoint, plain httpx) that translates the same message history at the edge.
 
 **Stopping conditions** (`AGENT_*`): max steps (12), total token budget, wall-clock timeout, and
 repeated identical tool calls. Hitting one triggers a single finalize turn ("submit with the
