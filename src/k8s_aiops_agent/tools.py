@@ -177,6 +177,7 @@ def shown_output(error: str | None, output: str) -> str:
 
 
 def tool_result_text(record: ToolRecord) -> str:
-    body = shown_output(record.error, record.output)
-    # Tool output is untrusted cluster data; the wrapper tells the model where it starts and ends.
+    # Tool output is untrusted cluster data; the wrapper tells the model where it starts and ends,
+    # so the data itself must not be able to close it early.
+    body = shown_output(record.error, record.output).replace("</tool_output", "<\\/tool_output")
     return f"evidence_id: {record.id}\n<tool_output>\n{body}\n</tool_output>"
