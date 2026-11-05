@@ -56,7 +56,7 @@ def investigate_command(
 ) -> None:
     """Investigate a namespace and print a root cause, evidence and a recommended action."""
     settings = _load_settings(backend, llm)
-    try:  # before any client, model or trace is set up
+    try:
         ensure_namespace_allowed(namespace, settings.allowed_namespaces)
     except ToolForbiddenError as error:
         raise _usage_error(str(error)) from error

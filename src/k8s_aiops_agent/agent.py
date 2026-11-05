@@ -47,9 +47,7 @@ VERIFY_ATTEMPTS = 10
 VERIFY_INTERVAL_SECONDS = 3.0
 # Evidence the agent writes itself (verification, fallback) quotes this much tool output.
 EXCERPT_CHARS = 300
-# A shorter excerpt (after normalizing) such as "a" or "ok" matches almost any output, so it
-# proves nothing; 5 still allows real short signals such as "Ready", "Pending" or "Evicted".
-# Quoting a whole output is always allowed, however short (e.g. "[]" for no events).
+# Shorter quotes ("a", "ok") match any output; a whole short output such as "[]" is still allowed.
 MIN_EXCERPT_CHARS = 5
 MISSING_SELECTOR_FIX = (
     "proposed_fix: a Service selector mismatch needs the corrected selector, so the operator "
@@ -235,7 +233,6 @@ class _InvestigationNodes:
         if held is not None:  # the retry for the selector failed; the valid diagnosis still stands
             return {
                 "diagnosis": held,
-                # Keep why the retry ended (model_error, a budget), so evals and stats see it.
                 "stop_reason": state.get("stop_reason")
                 or state.get("finalizing")
                 or "diagnosis_submitted",
@@ -503,7 +500,6 @@ def check_diagnosis(
         if record is None:
             problems.append(f"evidence cites unknown id '{item.tool_call_id}'")
             continue
-        # Escaped like the output, so a quote copied with or without the wrapper escape matches.
         excerpt = normalize_text(escape_wrapper(item.excerpt))
         output = normalize_text(shown_output(record["error"], record["output"]))
         if len(excerpt) < MIN_EXCERPT_CHARS and excerpt != output:

@@ -35,7 +35,7 @@ def _null_as(default: Any) -> BeforeValidator:
 
 class GeminiFunction(BaseModel):
     name: str
-    arguments: str | None = None  # null or "" both mean no arguments; see _tool_use_block
+    arguments: str | None = None
 
 
 class GeminiToolCall(BaseModel):

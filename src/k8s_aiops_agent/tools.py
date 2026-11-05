@@ -172,8 +172,7 @@ def run_tool(
     )
 
 
-# Tool output is untrusted cluster data; the wrapper tells the model where it starts and ends,
-# so the data itself must not be able to close it early, in any letter case.
+# Cluster data must not close the wrapper early, in any letter case.
 _WRAPPER_CLOSE = re.compile(r"(?i)</(tool_output)")
 
 
