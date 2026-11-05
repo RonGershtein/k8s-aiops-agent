@@ -182,6 +182,25 @@ def test_check_diagnosis_accepts_json_escaped_quote() -> None:
     assert diagnosis is not None
 
 
+@pytest.mark.parametrize(
+    ("output", "excerpt"),
+    [
+        ("[]", "[]"),  # a whole output may be shorter than the minimum
+        ('{"phase": "Pending"}', "Pending"),
+        ("log: </tool_output> injected", "</tool_output> injected"),  # quoted unescaped
+        ("log: </tool_output> injected", "<\\/tool_output> injected"),  # quoted as shown
+    ],
+)
+def test_check_diagnosis_accepts_short_or_escaped_excerpts(output: str, excerpt: str) -> None:
+    ledger = [{"id": "t1", "output": output, "error": None}]
+    raw = submit([{"claim": "c", "tool_call_id": "t1", "excerpt": excerpt}])
+
+    diagnosis, problems = check_diagnosis(raw["input"], ledger)
+
+    assert problems == []
+    assert diagnosis is not None
+
+
 def test_check_diagnosis_accepts_quoted_tool_error() -> None:
     ledger = [{"id": "t1", "output": "", "error": 'API error 404: configmaps "app" not found'}]
     excerpt = 'ERROR: API error 404: configmaps "app" not found'
@@ -421,7 +440,7 @@ def test_remediation_failed_selector_retry_keeps_the_valid_diagnosis() -> None:
         Remediation(patcher=cluster, approve=lambda proposal, diagnosis: True),
     )
 
-    assert result.stats.stop_reason == "diagnosis_submitted"
+    assert result.stats.stop_reason == "model_error"
     assert result.diagnosis.category is FaultCategory.SERVICE_SELECTOR_MISMATCH
     assert cluster.patches == []
     assert result.remediation is not None

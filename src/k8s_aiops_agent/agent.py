@@ -35,6 +35,7 @@ from k8s_aiops_agent.tools import (
     SUBMIT_DIAGNOSIS,
     ToolRecord,
     anthropic_tool_definitions,
+    escape_wrapper,
     run_tool,
     shown_output,
     tool_result_text,
@@ -46,8 +47,10 @@ VERIFY_ATTEMPTS = 10
 VERIFY_INTERVAL_SECONDS = 3.0
 # Evidence the agent writes itself (verification, fallback) quotes this much tool output.
 EXCERPT_CHARS = 300
-# An excerpt shorter than this (after normalizing) matches almost any output, so it proves nothing.
-MIN_EXCERPT_CHARS = 8
+# A shorter excerpt (after normalizing) such as "a" or "ok" matches almost any output, so it
+# proves nothing; 5 still allows real short signals such as "Ready", "Pending" or "Evicted".
+# Quoting a whole output is always allowed, however short (e.g. "[]" for no events).
+MIN_EXCERPT_CHARS = 5
 MISSING_SELECTOR_FIX = (
     "proposed_fix: a Service selector mismatch needs the corrected selector, so the operator "
     "can approve the fix"
@@ -232,7 +235,10 @@ class _InvestigationNodes:
         if held is not None:  # the retry for the selector failed; the valid diagnosis still stands
             return {
                 "diagnosis": held,
-                "stop_reason": "diagnosis_submitted",
+                # Keep why the retry ended (model_error, a budget), so evals and stats see it.
+                "stop_reason": state.get("stop_reason")
+                or state.get("finalizing")
+                or "diagnosis_submitted",
                 **_remediation_outcome(
                     approved=False, applied=False, message=NO_SELECTOR_IN_DIAGNOSIS
                 ),
@@ -496,14 +502,16 @@ def check_diagnosis(
         record = records.get(item.tool_call_id)
         if record is None:
             problems.append(f"evidence cites unknown id '{item.tool_call_id}'")
-        elif len(normalize_text(item.excerpt)) < MIN_EXCERPT_CHARS:
+            continue
+        # Escaped like the output, so a quote copied with or without the wrapper escape matches.
+        excerpt = normalize_text(escape_wrapper(item.excerpt))
+        output = normalize_text(shown_output(record["error"], record["output"]))
+        if len(excerpt) < MIN_EXCERPT_CHARS and excerpt != output:
             problems.append(
                 f"excerpt for {item.tool_call_id} is too short; quote at least "
                 f"{MIN_EXCERPT_CHARS} characters of the output"
             )
-        elif normalize_text(item.excerpt) not in normalize_text(
-            shown_output(record["error"], record["output"])
-        ):
+        elif excerpt not in output:
             problems.append(f"excerpt for {item.tool_call_id} is not verbatim from that output")
     return (None, problems) if problems else (diagnosis, [])
 
