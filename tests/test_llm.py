@@ -173,6 +173,17 @@ def test_gemini_rate_limit_retries_then_raises(
     assert len(sent) == attempts
 
 
+def test_gemini_reply_with_null_fields_parses() -> None:
+    reply = {"choices": [{"message": {"content": "done", "tool_calls": None}}], "usage": None}
+    client, _ = mock_http(httpx.Response(200, json=reply))
+    model = GeminiModel(gemini_settings(), client)
+
+    turn = model.create("system", [], [])
+
+    assert turn.content == [{"type": "text", "text": "done"}]
+    assert (turn.input_tokens, turn.output_tokens) == (0, 0)
+
+
 def test_gemini_malformed_reply_raises_model_error() -> None:
     client, _ = mock_http(httpx.Response(200, json={"unexpected": True}))
     model = GeminiModel(gemini_settings(), client)
