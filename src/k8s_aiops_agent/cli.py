@@ -16,6 +16,7 @@ from k8s_aiops_agent.evals import (
     ClaudeJudge,
     GeminiJudge,
     TrialResult,
+    enough_graded,
     load_scenarios,
     pass_rate,
     render_report,
@@ -137,6 +138,9 @@ def eval_command(
     )
     rate = pass_rate(results)
     console.print(f"pass rate {rate:.0%} -> {report}")
+    if not enough_graded(results):
+        console.print("[red]too many trials errored (model API) for the pass rate to count[/]")
+        raise typer.Exit(code=1)
     if rate < min_pass_rate:
         raise typer.Exit(code=1)
 

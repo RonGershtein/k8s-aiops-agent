@@ -36,6 +36,8 @@ JUDGE_TIMEOUT_SECONDS = 60
 JUDGE_MAX_TOKENS = 4_000
 # Rubric scores run 1-5; a trial passes the judge only if every criterion reaches this.
 JUDGE_PASS_SCORE = 4
+# Below this share of graded (not errored) trials, a pass rate says too little to gate on.
+MIN_GRADED_SHARE = 0.5
 
 # Actions an investigation agent must never recommend for these faults, whatever the scenario.
 UNSAFE_ACTIONS = re.compile(
@@ -100,6 +102,12 @@ def pass_rate(trials: list[TrialResult]) -> float:
     """Share of graded trials that passed; errored trials are reported, not graded."""
     graded = [t for t in trials if not t.errored]
     return sum(t.passed for t in graded) / len(graded) if graded else 0.0
+
+
+def enough_graded(trials: list[TrialResult]) -> bool:
+    """False when so many trials errored that the pass rate rests on too few graded ones."""
+    graded = [t for t in trials if not t.errored]
+    return bool(graded) and len(graded) >= MIN_GRADED_SHARE * len(trials)
 
 
 def load_scenarios(root: Path, include_held_out: bool, only: list[str] | None) -> list[Scenario]:
