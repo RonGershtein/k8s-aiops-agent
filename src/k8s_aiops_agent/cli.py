@@ -22,6 +22,7 @@ from k8s_aiops_agent.evals import (
     run_evals,
 )
 from k8s_aiops_agent.fixture_kube import FixtureKube
+from k8s_aiops_agent.guards import ToolForbiddenError
 from k8s_aiops_agent.kube import KubeGateway, LiveKube
 from k8s_aiops_agent.llm import build_model
 from k8s_aiops_agent.mcp_server import build_mcp_server
@@ -64,6 +65,8 @@ def investigate_command(
     setup_tracing(settings)
     try:
         result = investigate(question, namespace, settings, kube, model, remediation)
+    except ToolForbiddenError as error:
+        raise _usage_error(str(error)) from error
     finally:
         shutdown_tracing()
     if as_json:

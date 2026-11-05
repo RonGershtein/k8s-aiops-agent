@@ -9,7 +9,7 @@ from kubernetes.client.exceptions import ApiException
 
 from k8s_aiops_agent.config import AgentSettings
 from k8s_aiops_agent.evals import load_scenarios
-from k8s_aiops_agent.llm import ScriptedModel
+from k8s_aiops_agent.llm import ModelError, ModelTurn, ScriptedModel
 
 SCENARIOS_DIR = Path("scenarios")
 SCRIPTS_DIR = Path("evals/scripted")
@@ -24,6 +24,15 @@ def make_settings(**overrides: Any) -> AgentSettings:
 
 def scripted_model(scenario_id: str) -> ScriptedModel:
     return ScriptedModel.from_file(SCRIPTS_DIR / f"{scenario_id}.yaml")
+
+
+class ScriptThenFailModel(ScriptedModel):
+    """Replays its turns, then fails like an API outage (quota, 5xx) on every further call."""
+
+    def create(self, *args: Any) -> ModelTurn:
+        if self._position >= len(self.turns):
+            raise ModelError("Gemini API error 429: quota exhausted")
+        return super().create(*args)
 
 
 def tool_call(tool: str, **args: Any) -> dict[str, Any]:

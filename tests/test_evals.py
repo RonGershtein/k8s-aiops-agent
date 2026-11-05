@@ -107,7 +107,7 @@ def test_checks_flag_each_kind_of_bad_run(diagnosis: dict[str, Any], failed_chec
 
 def test_checks_irrelevant_evidence_misses_key_signals() -> None:
     ledger = [*LEDGER, {"id": "t2", "name": "list_pods", "output": "phase Running", "error": None}]
-    evidence = [{"claim": "pods run", "tool_call_id": "t2", "excerpt": "Running"}]
+    evidence = [{"claim": "pods run", "tool_call_id": "t2", "excerpt": "phase Running"}]
 
     checks = deterministic_checks(SCENARIO, result(ledger=ledger, evidence=evidence), SETTINGS)
 

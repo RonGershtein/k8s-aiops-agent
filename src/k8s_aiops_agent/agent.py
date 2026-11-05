@@ -15,7 +15,7 @@ from langgraph.types import Command, interrupt
 from pydantic import ValidationError
 
 from k8s_aiops_agent.config import AgentSettings
-from k8s_aiops_agent.guards import normalize_text
+from k8s_aiops_agent.guards import ensure_namespace_allowed, normalize_text
 from k8s_aiops_agent.kube import KubeError, KubeGateway
 from k8s_aiops_agent.llm import ChatModel, ModelError
 from k8s_aiops_agent.prompts import FINALIZE_PROMPT, NO_TOOL_CALL_PROMPT, SYSTEM_PROMPT
@@ -46,10 +46,13 @@ VERIFY_ATTEMPTS = 10
 VERIFY_INTERVAL_SECONDS = 3.0
 # Evidence the agent writes itself (verification, fallback) quotes this much tool output.
 EXCERPT_CHARS = 300
+# An excerpt shorter than this (after normalizing) matches almost any output, so it proves nothing.
+MIN_EXCERPT_CHARS = 8
 MISSING_SELECTOR_FIX = (
     "proposed_fix: a Service selector mismatch needs the corrected selector, so the operator "
     "can approve the fix"
 )
+NO_SELECTOR_IN_DIAGNOSIS = "No fix proposed: the diagnosis did not include the corrected selector."
 
 
 class AgentState(TypedDict, total=False):
@@ -67,6 +70,8 @@ class AgentState(TypedDict, total=False):
     finalizing: StopReason | None
     stop_reason: StopReason | None
     diagnosis: dict[str, Any] | None
+    # A valid diagnosis sent back once for its missing selector; kept in case the retry fails.
+    held_diagnosis: dict[str, Any] | None
     proposal: dict[str, Any] | None
     remediation: dict[str, Any] | None
 
@@ -172,9 +177,11 @@ class _InvestigationNodes:
         submit = next(t for t in calls if t["name"] == SUBMIT_DIAGNOSIS)
         with observe("validate_diagnosis", "evaluator", input_value=submit["input"]) as span:
             diagnosis, problems = check_diagnosis(submit["input"], state.get("ledger", []))
+            update: dict[str, Any] = {}
             if diagnosis is not None and self._selector_fix_missing_but_repairable(
                 diagnosis, state
             ):
+                update["held_diagnosis"] = diagnosis.model_dump(mode="json")
                 diagnosis, problems = None, [MISSING_SELECTOR_FIX]
             set_output(span, problems or "valid")
         if diagnosis is not None:
@@ -194,6 +201,7 @@ class _InvestigationNodes:
         return {
             "messages": [{"role": "user", "content": results}],
             "repairs": state.get("repairs", 0) + 1,
+            **update,
         }
 
     def _selector_fix_missing_but_repairable(self, diagnosis: Diagnosis, state: AgentState) -> bool:
@@ -220,6 +228,15 @@ class _InvestigationNodes:
         return "__end__"
 
     def fallback(self, state: AgentState) -> dict[str, Any]:
+        held = state.get("held_diagnosis")
+        if held is not None:  # the retry for the selector failed; the valid diagnosis still stands
+            return {
+                "diagnosis": held,
+                "stop_reason": "diagnosis_submitted",
+                **_remediation_outcome(
+                    approved=False, applied=False, message=NO_SELECTOR_IN_DIAGNOSIS
+                ),
+            }
         reason = state.get("stop_reason") or state.get("finalizing") or "invalid_diagnosis"
         diagnosis = fallback_diagnosis(reason, state.get("ledger", []))
         return {"diagnosis": diagnosis.model_dump(mode="json"), "stop_reason": reason}
@@ -256,9 +273,7 @@ class _RemediationNodes:
         fix = Diagnosis.model_validate(state["diagnosis"]).proposed_fix
         if fix is None:
             return _remediation_outcome(
-                approved=False,
-                applied=False,
-                message="No fix proposed: the diagnosis did not include the corrected selector.",
+                approved=False, applied=False, message=NO_SELECTOR_IN_DIAGNOSIS
             )
         with observe("remediation.propose", "span", input_value=fix) as span:
             proposal = build_proposal(self._kube, state["namespace"], fix)
@@ -397,6 +412,7 @@ def investigate(
     model: ChatModel,
     remediation: Remediation | None = None,
 ) -> InvestigationResult:
+    ensure_namespace_allowed(namespace, settings.allowed_namespaces)
     graph = build_graph(settings, kube, model, remediation)
     config: Any = {
         "configurable": {"thread_id": str(uuid.uuid4())},
@@ -480,8 +496,11 @@ def check_diagnosis(
         record = records.get(item.tool_call_id)
         if record is None:
             problems.append(f"evidence cites unknown id '{item.tool_call_id}'")
-        elif not normalize_text(item.excerpt):
-            problems.append(f"excerpt for {item.tool_call_id} is empty; quote the output")
+        elif len(normalize_text(item.excerpt)) < MIN_EXCERPT_CHARS:
+            problems.append(
+                f"excerpt for {item.tool_call_id} is too short; quote at least "
+                f"{MIN_EXCERPT_CHARS} characters of the output"
+            )
         elif normalize_text(item.excerpt) not in normalize_text(
             shown_output(record["error"], record["output"])
         ):
