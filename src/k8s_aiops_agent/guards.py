@@ -7,13 +7,13 @@ class ToolForbiddenError(Exception):
 
 
 _SECRET_WORD = r"(?:password|passwd|secret|token|api[_-]?key|private[_-]?key|credentials?)"
-_SECRET_KEY_VALUE = re.compile(
-    rf"""(?ix)
-    ("?[\w.-]*{_SECRET_WORD}[\w.-]*"?
-    \s*[:=]\s*"?)
-    ([^"\s,}}]+)
-    """
+# A quoted value is redacted up to its closing quote, so spaces and escaped quotes cannot leak.
+_SECRET_QUOTED_VALUE = re.compile(
+    rf'(?i)("?[\w.-]*{_SECRET_WORD}[\w.-]*"?\s*[:=]\s*")((?:[^"\\]|\\.)*)'
 )
+_SECRET_KEY_VALUE = re.compile(rf'(?i)([\w.-]*{_SECRET_WORD}[\w.-]*"?\s*[:=]\s*)([^"\s,}}]+)')
+_BASIC_AUTH = re.compile(r"(?i)(authorization\"?\s*[:=]\s*\"?basic\s+)[\w+/]+=*")
+_URL_PASSWORD = re.compile(r"(?i)(\b[a-z][a-z0-9+.-]*://[^/\s:@\"]+:)[^@\s/\"]+(?=@)")
 # Kubernetes env vars serialize as {"name": "DB_PASSWORD", "value": "..."}: the name is the key.
 _SECRET_ENV_VAR = re.compile(
     rf'(?i)("name":\s*"[\w.-]*{_SECRET_WORD}[\w.-]*",\s*"value":\s*")((?:[^"\\]|\\.)*)'
@@ -42,7 +42,10 @@ def ensure_namespace_allowed(namespace: str, allowed: Collection[str]) -> None:
 def redact(text: str) -> str:
     text = _JWT.sub(REDACTED, text)
     text = _BEARER.sub(rf"\g<1>{REDACTED}", text)
+    text = _BASIC_AUTH.sub(rf"\g<1>{REDACTED}", text)
+    text = _URL_PASSWORD.sub(rf"\g<1>{REDACTED}", text)
     text = _SECRET_ENV_VAR.sub(rf"\g<1>{REDACTED}", text)
+    text = _SECRET_QUOTED_VALUE.sub(rf"\g<1>{REDACTED}", text)
     return _SECRET_KEY_VALUE.sub(rf"\g<1>{REDACTED}", text)
 
 
