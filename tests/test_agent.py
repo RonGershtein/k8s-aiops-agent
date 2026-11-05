@@ -8,10 +8,17 @@ from k8s_aiops_agent.agent import MAX_REPEATED_CALLS, Remediation, check_diagnos
 from k8s_aiops_agent.config import AgentSettings
 from k8s_aiops_agent.evals import load_scenarios, trial_result
 from k8s_aiops_agent.fixture_kube import FixtureKube
+from k8s_aiops_agent.guards import ToolForbiddenError
 from k8s_aiops_agent.kube import KubeError
-from k8s_aiops_agent.llm import ModelError, ScriptedModel, build_model
+from k8s_aiops_agent.llm import ScriptedModel, build_model
 from k8s_aiops_agent.schemas import Diagnosis, FaultCategory, RemediationProposal
-from tests.builders import SCENARIOS_DIR, make_settings, scripted_model, tool_call
+from tests.builders import (
+    SCENARIOS_DIR,
+    ScriptThenFailModel,
+    make_settings,
+    scripted_model,
+    tool_call,
+)
 
 
 def submit(evidence: list[dict[str, str]], **overrides: Any) -> dict[str, Any]:
@@ -119,16 +126,17 @@ def test_investigate_ungrounded_twice_falls_back(kube: FixtureKube) -> None:
 def test_investigate_model_error_is_inconclusive(
     kube: FixtureKube,
 ) -> None:
-    class FailingModel:
-        name = "failing"
-
-        def create(self, *args: Any) -> Any:
-            raise ModelError("Claude API error 529: overloaded")
-
-    result = investigate("q", "scenario-01", make_settings(), kube, FailingModel())
+    result = investigate("q", "scenario-01", make_settings(), kube, ScriptThenFailModel([]))
 
     assert result.stats.stop_reason == "model_error"
     assert result.diagnosis.confidence == 0.0
+
+
+def test_investigate_namespace_outside_allowlist_is_forbidden(kube: FixtureKube) -> None:
+    model = ScriptedModel([[LIST_PODS]])
+
+    with pytest.raises(ToolForbiddenError, match="kube-system"):
+        investigate("q", "kube-system", make_settings(), kube, model)
 
 
 def test_investigate_disallowed_namespace_is_tool_error(
@@ -146,7 +154,8 @@ def test_investigate_disallowed_namespace_is_tool_error(
     [
         ({"tool_call_id": "t7", "excerpt": "x"}, "unknown id 't7'"),
         ({"tool_call_id": "t1", "excerpt": "not in output"}, "not verbatim"),
-        ({"tool_call_id": "t1", "excerpt": " "}, "is empty"),
+        ({"tool_call_id": "t1", "excerpt": " "}, "too short"),
+        ({"tool_call_id": "t1", "excerpt": "R"}, "too short"),
     ],
 )
 def test_check_diagnosis_rejects_unsupported_evidence(
@@ -395,5 +404,25 @@ def test_remediation_without_selector_says_why() -> None:
 
     assert cluster.patches == []
     assert result.diagnosis.category is FaultCategory.SERVICE_SELECTOR_MISMATCH
+    assert result.remediation is not None
+    assert "did not include the corrected selector" in result.remediation.message
+
+
+def test_remediation_failed_selector_retry_keeps_the_valid_diagnosis() -> None:
+    cluster = FakeCluster()
+    model = ScriptThenFailModel([[READ_SERVICE], [selector_submit(None)]])
+
+    result = investigate(
+        "q",
+        "scenario-03",
+        make_settings(),
+        cluster,
+        model,  # type: ignore[arg-type]
+        Remediation(patcher=cluster, approve=lambda proposal, diagnosis: True),
+    )
+
+    assert result.stats.stop_reason == "diagnosis_submitted"
+    assert result.diagnosis.category is FaultCategory.SERVICE_SELECTOR_MISMATCH
+    assert cluster.patches == []
     assert result.remediation is not None
     assert "did not include the corrected selector" in result.remediation.message

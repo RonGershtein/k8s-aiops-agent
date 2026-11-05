@@ -8,12 +8,12 @@ import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Annotated, Any, Protocol
 
 import anthropic
 import httpx
 import yaml
-from pydantic import BaseModel, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, BeforeValidator, Field, TypeAdapter, ValidationError
 
 from k8s_aiops_agent.config import AgentSettings, LlmProvider
 
@@ -28,9 +28,14 @@ class ModelError(Exception):
     """The model call failed after the SDK's own retries."""
 
 
+def _null_as(default: Any) -> BeforeValidator:
+    """OpenAI-compatible replies may send an absent field as an explicit null."""
+    return BeforeValidator(lambda value: default if value is None else value)
+
+
 class GeminiFunction(BaseModel):
     name: str
-    arguments: str = "{}"
+    arguments: Annotated[str, _null_as("{}")] = "{}"
 
 
 class GeminiToolCall(BaseModel):
@@ -42,7 +47,7 @@ class GeminiToolCall(BaseModel):
 
 class GeminiMessage(BaseModel):
     content: str | None = None
-    tool_calls: list[GeminiToolCall] = Field(default_factory=list)
+    tool_calls: Annotated[list[GeminiToolCall], _null_as([])] = Field(default_factory=list)
 
 
 class GeminiChoice(BaseModel):
@@ -51,15 +56,15 @@ class GeminiChoice(BaseModel):
 
 
 class GeminiUsage(BaseModel):
-    prompt_tokens: int = 0
-    completion_tokens: int = 0
+    prompt_tokens: Annotated[int, _null_as(0)] = 0
+    completion_tokens: Annotated[int, _null_as(0)] = 0
 
 
 class GeminiResponse(BaseModel):
     """The parts of an OpenAI-compatible chat completion the agent reads, validated."""
 
     choices: list[GeminiChoice] = Field(min_length=1)
-    usage: GeminiUsage = Field(default_factory=GeminiUsage)
+    usage: Annotated[GeminiUsage, _null_as({})] = Field(default_factory=GeminiUsage)
     model: str | None = None
 
 

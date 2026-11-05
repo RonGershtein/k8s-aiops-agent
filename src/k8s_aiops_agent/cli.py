@@ -16,12 +16,14 @@ from k8s_aiops_agent.evals import (
     ClaudeJudge,
     GeminiJudge,
     TrialResult,
+    enough_graded,
     load_scenarios,
     pass_rate,
     render_report,
     run_evals,
 )
 from k8s_aiops_agent.fixture_kube import FixtureKube
+from k8s_aiops_agent.guards import ToolForbiddenError
 from k8s_aiops_agent.kube import KubeGateway, LiveKube
 from k8s_aiops_agent.llm import build_model
 from k8s_aiops_agent.mcp_server import build_mcp_server
@@ -64,6 +66,8 @@ def investigate_command(
     setup_tracing(settings)
     try:
         result = investigate(question, namespace, settings, kube, model, remediation)
+    except ToolForbiddenError as error:
+        raise _usage_error(str(error)) from error
     finally:
         shutdown_tracing()
     if as_json:
@@ -134,6 +138,9 @@ def eval_command(
     )
     rate = pass_rate(results)
     console.print(f"pass rate {rate:.0%} -> {report}")
+    if not enough_graded(results):
+        console.print("[red]too many trials errored (model API) for the pass rate to count[/]")
+        raise typer.Exit(code=1)
     if rate < min_pass_rate:
         raise typer.Exit(code=1)
 

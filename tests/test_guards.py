@@ -26,6 +26,10 @@ def test_namespace_outside_allowlist_is_forbidden() -> None:
         "api_key=hunter2",
         "Authorization: Bearer hunter2",
         "token: eyJhbGciOi.eyJzdWIiOi.c2lnbmF0dXJl",
+        '{"db_password": "correct hunter2 battery"}',
+        '{"api_key": "abc\\"hunter2"}',
+        "Authorization: Basic hunter2==",
+        '{"DATABASE_URL": "postgres://admin:hunter2@db:5432/app"}',
     ],
 )
 def test_redact_secret_like_values_removes_the_value(text: str) -> None:

@@ -13,6 +13,7 @@ from k8s_aiops_agent.evals import (
     Scenario,
     TrialResult,
     deterministic_checks,
+    enough_graded,
     load_scenarios,
     pass_rate,
     push_scores,
@@ -107,7 +108,7 @@ def test_checks_flag_each_kind_of_bad_run(diagnosis: dict[str, Any], failed_chec
 
 def test_checks_irrelevant_evidence_misses_key_signals() -> None:
     ledger = [*LEDGER, {"id": "t2", "name": "list_pods", "output": "phase Running", "error": None}]
-    evidence = [{"claim": "pods run", "tool_call_id": "t2", "excerpt": "Running"}]
+    evidence = [{"claim": "pods run", "tool_call_id": "t2", "excerpt": "phase Running"}]
 
     checks = deterministic_checks(SCENARIO, result(ledger=ledger, evidence=evidence), SETTINGS)
 
@@ -239,6 +240,26 @@ def test_pass_rate_with_only_errored_trials_is_zero() -> None:
     rate = pass_rate(trials)
 
     assert rate == 0.0
+
+
+def test_enough_graded_with_most_trials_errored_is_false() -> None:
+    trials = [
+        graded_trial(),
+        graded_trial(stop_reason="model_error"),
+        graded_trial(stop_reason="model_error"),
+    ]
+
+    ok = enough_graded(trials)
+
+    assert not ok
+
+
+def test_enough_graded_with_half_graded_is_true() -> None:
+    trials = [graded_trial(), graded_trial(stop_reason="model_error")]
+
+    ok = enough_graded(trials)
+
+    assert ok
 
 
 def test_report_lists_errored_apart_from_failed() -> None:
