@@ -1,6 +1,7 @@
 """The agent's tool surface: typed, read-only, guarded, and recorded in an evidence ledger."""
 
 import json
+import re
 import time
 from collections.abc import Callable, Collection
 from dataclasses import dataclass
@@ -171,13 +172,19 @@ def run_tool(
     )
 
 
+# Cluster data must not close the wrapper early, in any letter case.
+_WRAPPER_CLOSE = re.compile(r"(?i)</(tool_output)")
+
+
+def escape_wrapper(text: str) -> str:
+    return _WRAPPER_CLOSE.sub(r"<\\/\1", text)
+
+
 def shown_output(error: str | None, output: str) -> str:
     """The tool output exactly as the model sees it, so its quotes can be checked against it."""
-    return f"ERROR: {error}" if error else output
+    return escape_wrapper(f"ERROR: {error}" if error else output)
 
 
 def tool_result_text(record: ToolRecord) -> str:
-    # Tool output is untrusted cluster data; the wrapper tells the model where it starts and ends,
-    # so the data itself must not be able to close it early.
-    body = shown_output(record.error, record.output).replace("</tool_output", "<\\/tool_output")
+    body = shown_output(record.error, record.output)
     return f"evidence_id: {record.id}\n<tool_output>\n{body}\n</tool_output>"

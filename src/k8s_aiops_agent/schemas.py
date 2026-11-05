@@ -14,7 +14,6 @@ class FaultCategory(StrEnum):
     RESOURCE_EXHAUSTION = "resource_exhaustion"
     SCHEDULING_FAILURE = "scheduling_failure"
     OTHER = "other"
-    # Special case: the investigation could not support any conclusion.
     INCONCLUSIVE = "inconclusive"
 
 

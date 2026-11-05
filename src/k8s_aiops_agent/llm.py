@@ -35,7 +35,7 @@ def _null_as(default: Any) -> BeforeValidator:
 
 class GeminiFunction(BaseModel):
     name: str
-    arguments: Annotated[str, _null_as("{}")] = "{}"
+    arguments: str | None = None
 
 
 class GeminiToolCall(BaseModel):
@@ -231,7 +231,7 @@ def gemini_request(
                 }
             )
         else:
-            for b in blocks:  # tool results first, as the graph builds them, then any text
+            for b in blocks:
                 if b["type"] == "tool_result":
                     out.append(
                         {"role": "tool", "tool_call_id": b["tool_use_id"], "content": b["content"]}

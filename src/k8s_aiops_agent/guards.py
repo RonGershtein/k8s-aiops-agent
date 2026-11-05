@@ -7,17 +7,20 @@ class ToolForbiddenError(Exception):
 
 
 _SECRET_WORD = r"(?:password|passwd|secret|token|api[_-]?key|private[_-]?key|credentials?)"
-# A quoted value is redacted up to its closing quote, so spaces and escaped quotes cannot leak.
+# Keys like secretKeyRef, secretName or tokenFile point at a secret; their values are not secret.
+_SECRET_KEY = rf"[\w.-]*{_SECRET_WORD}[\w.-]*(?<!ref)(?<!name)(?<!file)(?<!path)(?<!dir)(?<!mount)"
+_KEY_END = r'(?:\\?")?'
+# Redacts up to the closing quote: "...", '...', or \"...\" inside a JSON string.
 _SECRET_QUOTED_VALUE = re.compile(
-    rf'(?i)("?[\w.-]*{_SECRET_WORD}[\w.-]*"?\s*[:=]\s*")((?:[^"\\]|\\.)*)'
+    rf"""(?i)({_SECRET_KEY}{_KEY_END}\s*[:=]\s*(\\?["']))((?:(?!\2)(?:[^\\]|\\.))*)"""
 )
-_SECRET_KEY_VALUE = re.compile(rf'(?i)([\w.-]*{_SECRET_WORD}[\w.-]*"?\s*[:=]\s*)([^"\s,}}]+)')
+_SECRET_KEY_VALUE = re.compile(
+    rf"""(?i)({_SECRET_KEY}{_KEY_END}\s*[:=]\s*)([^"'\s,}}{{\[\\][^"\s,}}\\]*)"""
+)
 _BASIC_AUTH = re.compile(r"(?i)(authorization\"?\s*[:=]\s*\"?basic\s+)[\w+/]+=*")
-_URL_PASSWORD = re.compile(r"(?i)(\b[a-z][a-z0-9+.-]*://[^/\s:@\"]+:)[^@\s/\"]+(?=@)")
+_URL_PASSWORD = re.compile(r"(?i)(\b[a-z][a-z0-9+.-]*://[^/\s:@\"]+:)[^@\s\"]+?(?=@)")
 # Kubernetes env vars serialize as {"name": "DB_PASSWORD", "value": "..."}: the name is the key.
-_SECRET_ENV_VAR = re.compile(
-    rf'(?i)("name":\s*"[\w.-]*{_SECRET_WORD}[\w.-]*",\s*"value":\s*")((?:[^"\\]|\\.)*)'
-)
+_SECRET_ENV_VAR = re.compile(rf'(?i)("name":\s*"{_SECRET_KEY}",\s*"value":\s*")((?:[^"\\]|\\.)*)')
 _BEARER = re.compile(r"(?i)(bearer\s+)[\w.~+/-]+=*")
 _JWT = re.compile(r"eyJ[\w-]+\.[\w-]+\.[\w-]+")
 

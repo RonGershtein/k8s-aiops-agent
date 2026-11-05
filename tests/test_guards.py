@@ -30,6 +30,10 @@ def test_namespace_outside_allowlist_is_forbidden() -> None:
         '{"api_key": "abc\\"hunter2"}',
         "Authorization: Basic hunter2==",
         '{"DATABASE_URL": "postgres://admin:hunter2@db:5432/app"}',
+        r'{"config.yaml": "db:\n  password: \"correct hunter2\"\n"}',
+        r'{"app.json": "{\"api_key\": \"correct hunter2\"}"}',
+        "postgres://admin:pa/hunter2@db:5432",
+        "API_KEY='correct hunter2'",
     ],
 )
 def test_redact_secret_like_values_removes_the_value(text: str) -> None:
@@ -40,9 +44,15 @@ def test_redact_secret_like_values_removes_the_value(text: str) -> None:
     assert REDACTED in redacted
 
 
-def test_redact_ordinary_config_keeps_text_unchanged() -> None:
-    text = '{"PAYMENT_TIMEOUT_MS": "30s", "replicas": 2}'
-
+@pytest.mark.parametrize(
+    "text",
+    [
+        '{"PAYMENT_TIMEOUT_MS": "30s", "replicas": 2}',
+        '{"valueFrom": {"secretKeyRef": {"name": "db", "key": "password"}}}',
+        '{"secretName": "db-creds", "tokenFile": "/var/run/token"}',
+    ],
+)
+def test_redact_ordinary_config_keeps_text_unchanged(text: str) -> None:
     assert redact(text) == text
 
 
