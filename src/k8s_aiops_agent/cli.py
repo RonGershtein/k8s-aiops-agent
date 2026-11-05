@@ -23,7 +23,7 @@ from k8s_aiops_agent.evals import (
     run_evals,
 )
 from k8s_aiops_agent.fixture_kube import FixtureKube
-from k8s_aiops_agent.guards import ToolForbiddenError
+from k8s_aiops_agent.guards import ToolForbiddenError, ensure_namespace_allowed
 from k8s_aiops_agent.kube import KubeGateway, LiveKube
 from k8s_aiops_agent.llm import build_model
 from k8s_aiops_agent.mcp_server import build_mcp_server
@@ -56,6 +56,10 @@ def investigate_command(
 ) -> None:
     """Investigate a namespace and print a root cause, evidence and a recommended action."""
     settings = _load_settings(backend, llm)
+    try:  # before any client, model or trace is set up
+        ensure_namespace_allowed(namespace, settings.allowed_namespaces)
+    except ToolForbiddenError as error:
+        raise _usage_error(str(error)) from error
     kube = _build_kube(settings)
     try:
         model = build_model(settings, script)
@@ -66,8 +70,6 @@ def investigate_command(
     setup_tracing(settings)
     try:
         result = investigate(question, namespace, settings, kube, model, remediation)
-    except ToolForbiddenError as error:
-        raise _usage_error(str(error)) from error
     finally:
         shutdown_tracing()
     if as_json:

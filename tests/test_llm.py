@@ -202,6 +202,18 @@ def test_gemini_invalid_tool_arguments_raise_model_error() -> None:
         model.create("system", [], [])
 
 
+@pytest.mark.parametrize("arguments", [None, ""])
+def test_gemini_tool_call_without_arguments_has_empty_input(arguments: str | None) -> None:
+    reply = json.loads(json.dumps(GEMINI_TOOL_CALL))
+    reply["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"] = arguments
+    client, _ = mock_http(httpx.Response(200, json=reply))
+    model = GeminiModel(gemini_settings(), client)
+
+    turn = model.create("system", [], [])
+
+    assert turn.content[-1]["input"] == {}
+
+
 def test_build_model_without_api_or_script_explains_the_key() -> None:
     settings = make_settings()
 
