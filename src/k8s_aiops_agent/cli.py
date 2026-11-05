@@ -75,7 +75,7 @@ def investigate_command(
     if as_json:
         print(result.model_dump_json(indent=2))
     elif approval.shown_findings:
-        _print_outcome(result)  # the investigation and diagnosis were shown before the prompt
+        _print_outcome(result)
     else:
         _print_result(result, settings.trace_dir)
 

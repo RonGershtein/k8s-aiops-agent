@@ -244,7 +244,7 @@ def trial_result(
             anthropic.APIError,
             ModelError,
             RuntimeError,
-        ):  # one failed grade must not lose the whole run
+        ):
             checks["judge_completed"] = False
     judge_ok = (
         score is None
@@ -286,7 +286,7 @@ def run_evals(
             result = trial_result(scenario, trial, run, settings, judge)
             try:
                 push_scores(settings, result)
-            except OSError as error:  # Langfuse being down must not lose the eval results
+            except OSError as error:
                 logger.warning("could not push scores for %s: %s", result.trace_id, error)
             results.append(result)
             on_result(result)

@@ -185,10 +185,10 @@ def test_check_diagnosis_accepts_json_escaped_quote() -> None:
 @pytest.mark.parametrize(
     ("output", "excerpt"),
     [
-        ("[]", "[]"),  # a whole output may be shorter than the minimum
+        ("[]", "[]"),
         ('{"phase": "Pending"}', "Pending"),
-        ("log: </tool_output> injected", "</tool_output> injected"),  # quoted unescaped
-        ("log: </tool_output> injected", "<\\/tool_output> injected"),  # quoted as shown
+        ("log: </tool_output> injected", "</tool_output> injected"),
+        ("log: </tool_output> injected", "<\\/tool_output> injected"),
     ],
 )
 def test_check_diagnosis_accepts_short_or_escaped_excerpts(output: str, excerpt: str) -> None:

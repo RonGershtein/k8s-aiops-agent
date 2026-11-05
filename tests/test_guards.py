@@ -30,7 +30,6 @@ def test_namespace_outside_allowlist_is_forbidden() -> None:
         '{"api_key": "abc\\"hunter2"}',
         "Authorization: Basic hunter2==",
         '{"DATABASE_URL": "postgres://admin:hunter2@db:5432/app"}',
-        # a YAML/JSON file inside a ConfigMap value: the quotes arrive JSON-escaped
         r'{"config.yaml": "db:\n  password: \"correct hunter2\"\n"}',
         r'{"app.json": "{\"api_key\": \"correct hunter2\"}"}',
         "postgres://admin:pa/hunter2@db:5432",

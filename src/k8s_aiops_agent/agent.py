@@ -230,7 +230,7 @@ class _InvestigationNodes:
 
     def fallback(self, state: AgentState) -> dict[str, Any]:
         held = state.get("held_diagnosis")
-        if held is not None:  # the retry for the selector failed; the valid diagnosis still stands
+        if held is not None:
             return {
                 "diagnosis": held,
                 "stop_reason": state.get("stop_reason")
@@ -291,7 +291,6 @@ class _RemediationNodes:
         return "approve" if state.get("proposal") else "__end__"
 
     def approve(self, state: AgentState) -> Command[Literal["apply", "__end__"]]:
-        # Pauses the graph; the caller shows the proposal to a human and resumes with their answer.
         approved = bool(interrupt(state["proposal"]))
         with observe("remediation.approval", "span", input_value=state["proposal"]) as span:
             set_output(span, {"approved": approved})
