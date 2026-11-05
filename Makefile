@@ -51,7 +51,7 @@ scenario-up:
 
 scenarios-up:
 	for f in scenarios/*/manifests.yaml; do \
-		kubectl --context kind-aiops apply -f $$f && kubectl --context kind-aiops replace --save-config -f $$f >/dev/null; \
+		kubectl --context kind-aiops apply -f $$f && kubectl --context kind-aiops replace --save-config -f $$f >/dev/null || exit 1; \
 	done
 	kubectl --context kind-aiops -n scenario-03 rollout status deploy/frontend --timeout=180s
 
